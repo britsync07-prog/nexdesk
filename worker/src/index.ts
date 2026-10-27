@@ -711,13 +711,14 @@ async function shopOpeningBalances(request: Request, env: Env, user: User) {
   const cash = shopPaisa(body.cash);
   const receivable = shopPaisa(body.receivable);
   const payable = shopPaisa(body.payable);
-  const partyName = String(body.partyName || "").trim();
-  if ((!cash && !receivable && !payable) || ((receivable || payable) && !partyName)) return json({ error: "Enter an amount and a customer or supplier where needed" }, 400);
+  const receivablePartyName = String(body.receivablePartyName || body.partyName || "").trim();
+  const payablePartyName = String(body.payablePartyName || body.partyName || "").trim();
+  if ((!cash && !receivable && !payable) || (receivable && !receivablePartyName) || (payable && !payablePartyName)) return json({ error: "Enter an amount and a customer or supplier where needed" }, 400);
   const dateStr = validDate(body.dateStr) ? String(body.dateStr) : new Date().toISOString().slice(0, 10);
   const entries: [ShopLedgerMethod, number, string][] = [];
   if (cash) entries.push(["opening_cash", cash, "Opening cash"]);
-  if (receivable) entries.push(["opening_receivable", receivable, partyName]);
-  if (payable) entries.push(["opening_payable", payable, partyName]);
+  if (receivable) entries.push(["opening_receivable", receivable, receivablePartyName]);
+  if (payable) entries.push(["opening_payable", payable, payablePartyName]);
   await env.DB.batch(entries.map(([method, amountPaisa, party]) => env.DB.prepare("INSERT INTO ShopTransaction (id,userId,dateStr,enteredBy,enteredByKey,method,partyName,partyKey,amountPaisa,note,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)").bind(id(), user.id, dateStr, "Opening balance", shopKey("Opening balance"), method, party, shopKey(party), amountPaisa, "Opening balance")));
   return json({ success: true }, 201);
 }
