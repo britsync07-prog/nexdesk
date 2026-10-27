@@ -737,12 +737,15 @@ async function syncShopTransaction(env: Env, user: User, transactionId: string) 
 }
 async function syncAllShopTransactions(env: Env, user: User) {
   const rows = await env.DB.prepare("SELECT id FROM ShopTransaction WHERE userId=? ORDER BY dateStr,createdAt LIMIT 5000").bind(user.id).all<{ id: string }>();
-  for (const row of rows.results) await syncShopTransaction(env, user, row.id);
+  let synced = 0;
+  for (const row of rows.results) { await syncShopTransaction(env, user, row.id); synced++; }
+  return synced;
 }
 async function shopSheet(request: Request, env: Env, user: User) {
   let spreadsheetId = (await env.DB.prepare("SELECT spreadsheetId FROM ShopGoogleSheet WHERE userId=?").bind(user.id).first<{ spreadsheetId: string }>())?.spreadsheetId;
-  if (request.method === "POST" && !spreadsheetId) spreadsheetId = await ensureShopSheet(env, user);
-  return json({ spreadsheetId: spreadsheetId || null, webViewLink: spreadsheetId ? `https://docs.google.com/spreadsheets/d/${spreadsheetId}` : null });
+  let synced = 0;
+  if (request.method === "POST") { spreadsheetId = spreadsheetId || await ensureShopSheet(env, user); synced = await syncAllShopTransactions(env, user); }
+  return json({ spreadsheetId: spreadsheetId || null, synced, webViewLink: spreadsheetId ? `https://docs.google.com/spreadsheets/d/${spreadsheetId}` : null });
 }
 async function shopOpeningBalances(request: Request, env: Env, user: User) {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
