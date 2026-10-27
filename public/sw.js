@@ -15,9 +15,7 @@ const STATIC_ASSETS = [
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS).catch((err) => {
-        console.warn("ServiceWorker precache partial failure:", err);
-      });
+      return Promise.all(STATIC_ASSETS.map((asset) => cache.add(asset).catch(() => undefined)));
     })
   );
   self.skipWaiting();
@@ -54,8 +52,8 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Clone and store in cache if valid
-        if (response && response.status === 200 && response.type === "basic") {
+        // Clone and store successful app shells and Next route payloads.
+        if (response && response.status === 200) {
           const responseToCache = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache);
@@ -70,7 +68,7 @@ self.addEventListener("fetch", (event) => {
             return cachedResponse;
           }
           if (event.request.mode === "navigate") {
-            return caches.match("/dashboard");
+            return caches.match("/dashboard").then((dashboard) => dashboard || caches.match("/"));
           }
           return new Response("Offline content not available", {
             status: 503,
