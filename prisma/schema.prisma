@@ -1,0 +1,111 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                String             @id @default(cuid())
+  email             String             @unique
+  name              String?
+  image             String?
+  googleId          String?            @unique
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  integration       GoogleIntegration?
+  records           ShiftRecord[]
+  customColumns     CustomColumn[]
+  syncAuditLogs     SyncAuditLog[]
+}
+
+model GoogleIntegration {
+  id                String       @id @default(cuid())
+  userId            String       @unique
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  spreadsheetId     String?
+  spreadsheetName   String?      @default("ShiftLog Records")
+  sheetTabId        Int?         @default(0)
+  sheetTabName      String?      @default("Records")
+  accessToken       String?
+  refreshToken      String?
+  tokenExpiry       DateTime?
+  scopes            String?
+  syncStatus        String       @default("idle") // idle, syncing, synced, error
+  lastSyncAt        DateTime?
+  lastError         String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+}
+
+model CustomColumn {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key         String   // sanitized slug (e.g. machine_no)
+  name        String   // Display label
+  type        String   // TEXT, NUMBER, DATE, SELECT
+  options     String?  // JSON string array for SELECT
+  required    Boolean  @default(false)
+  order       Int      @default(0)
+  isDeleted   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, key])
+  @@index([userId, order])
+}
+
+model ShiftRecord {
+  id            String         @id @default(cuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dateStr       String         // YYYY-MM-DD for zero timezone offset issues
+  date          DateTime
+  shift         String         // Day or Night
+  supervisedBy  String
+  factoryName   String
+  location      String
+  personsCount  Int            @default(1)
+  remarks       String?
+  customValues  String?        // JSON string { [columnKey]: string }
+  syncStatus    String         @default("pending") // pending, synced, failed
+  sheetRowIndex Int?
+  lastSyncedAt  DateTime?
+  syncError     String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  persons       RecordPerson[]
+
+  @@index([userId, dateStr])
+  @@index([userId, shift])
+  @@index([userId, supervisedBy])
+  @@index([userId, factoryName])
+  @@index([userId, location])
+}
+
+model RecordPerson {
+  id          String      @id @default(cuid())
+  recordId    String
+  record      ShiftRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  personIndex Int         // 1 to 20
+  name        String      // Person's name e.g. Tuhin
+  createdAt   DateTime    @default(now())
+
+  @@index([recordId])
+  @@index([name])
+}
+
+model SyncAuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  operation String   // DISCOVER, CREATE_SHEET, SYNC_RECORD, IMPORT, REPAIR
+  status    String   // SUCCESS, FAILED, WARNING
+  details   String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}

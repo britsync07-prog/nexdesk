@@ -1,0 +1,133 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #09090b;
+    --surface: #121215;
+    --surface-elevated: #18181b;
+    --surface-border: #27272a;
+    --foreground: #f4f4f5;
+    --muted-foreground: #a1a1aa;
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --accent-light: rgba(59, 130, 246, 0.15);
+    --warning: #f59e0b;
+    --success: #10b981;
+    --destructive: #ef4444;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+    user-select: text;
+    font-family: var(--font-hanken), Arial, sans-serif;
+  }
+}
+
+/* Safe areas for iOS mobile viewports */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Smooth tactile interactions */
+button, input, select, textarea {
+  touch-action: manipulation;
+}
+
+/* Hide scrollbars for horizontal chip trays */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.nex-reveal { animation: nex-reveal .7s cubic-bezier(.2,.7,.2,1) both; }
+.nex-reveal-delay { animation-delay: .12s; }
+@keyframes nex-reveal { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .nex-reveal, .nex-reveal-delay { animation: none; } }
+
+/* Internal screens use one light surface system while legacy components are migrated. */
+.nex-app input,
+.nex-app select,
+.nex-app textarea {
+  background: #fff !important;
+  border-color: #cdced1 !important;
+  color: #131416 !important;
+}
+.nex-app [class*="bg-[#121215]"],
+.nex-app [class*="bg-[#18181b]"],
+.nex-app [class*="bg-zinc-900"],
+.nex-app [class*="bg-zinc-800"] {
+  background-color: #f4f6f8 !important;
+  border-color: #e0e4e5 !important;
+  box-shadow: none !important;
+}
+.nex-app [class*="text-white"],
+.nex-app [class*="text-zinc-100"],
+.nex-app [class*="text-zinc-200"],
+.nex-app [class*="text-zinc-300"] {
+  color: #131416 !important;
+}
+.nex-app [class*="text-zinc-400"],
+.nex-app [class*="text-zinc-500"] {
+  color: #5d5f60 !important;
+}
+.nex-app [class*="border-zinc-7"],
+.nex-app [class*="border-zinc-8"] {
+  border-color: #e0e4e5 !important;
+}
+.nex-app button[class*="bg-[#131416]"],
+.nex-app a[class*="bg-[#131416]"] {
+  color: #fff !important;
+}
+
+.theme-dark { color-scheme: dark; }
+.theme-dark body { background: #171917; color: #f1f4f1; }
+.theme-dark .nex-app { background-color: #171917 !important; color: #f1f4f1; }
+.theme-dark .nex-app [class*="bg-[#e4eae6]"],
+.theme-dark .nex-app [class*="bg-white"] { background-color: #202421 !important; }
+.theme-dark .nex-app [class*="bg-[#f4f6f8]"],
+.theme-dark .nex-app [class*="bg-[#f9fbfc]"] { background-color: #272b28 !important; }
+.theme-dark .nex-app [class*="bg-[#121215]"],
+.theme-dark .nex-app [class*="bg-[#18181b]"],
+.theme-dark .nex-app [class*="bg-zinc-900"],
+.theme-dark .nex-app [class*="bg-zinc-800"] { background-color: #202421 !important; border-color: #3c433e !important; }
+.theme-dark .nex-app [class*="text-[#131416]"],
+.theme-dark .nex-app [class*="text-zinc-900"],
+.theme-dark .nex-app [class*="text-zinc-800"],
+.theme-dark .nex-app [class*="text-white"],
+.theme-dark .nex-app [class*="text-zinc-100"],
+.theme-dark .nex-app [class*="text-zinc-200"],
+.theme-dark .nex-app [class*="text-zinc-300"] { color: #f1f4f1 !important; }
+.theme-dark .nex-app [class*="text-[#5d5f60]"],
+.theme-dark .nex-app [class*="text-zinc-400"],
+.theme-dark .nex-app [class*="text-zinc-500"],
+.theme-dark .nex-app [class*="text-zinc-600"] { color: #b9c1bb !important; }
+.theme-dark .nex-app [class*="border-[#e8eaec]"],
+.theme-dark .nex-app [class*="border-[#e0e4e5]"],
+.theme-dark .nex-app [class*="border-[#d6dbd8]"] { border-color: #3c433e !important; }
+.theme-dark .nex-app [class*="divide-y"] > :not([hidden]) ~ :not([hidden]) { border-color: #343a36 !important; }
+.theme-dark .nex-app input,
+.theme-dark .nex-app select,
+.theme-dark .nex-app textarea { background: #171917 !important; border-color: #4a534c !important; color: #f1f4f1 !important; }
+.theme-dark aside { background-color: #1b1e1c !important; border-color: #303630 !important; }
+.theme-dark nav { background-color: #202421 !important; border-color: #3c433e !important; }
+.theme-dark aside [class*="hover:bg-white"],
+.theme-dark aside [class*="bg-white"],
+.theme-dark nav [class*="hover:bg-white"] { background-color: #292e2b !important; }
+.theme-dark aside [class*="text-[#131416]"],
+.theme-dark aside [class*="text-[#5d5f60]"],
+.theme-dark nav [class*="text-[#131416]"],
+.theme-dark nav [class*="text-[#5d5f60]"] { color: #d6ddd7 !important; }
+.theme-dark .nex-app [class*="text-[#1b6c80]"] { color: #72bfd2 !important; }
+.theme-dark .nex-app [class*="hover:text-[#135464]"]:hover { color: #a1d8e5 !important; }

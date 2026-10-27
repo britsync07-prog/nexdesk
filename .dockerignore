@@ -1,0 +1,9 @@
+node_modules
+.next
+.env
+prisma/dev.db
+prisma/migration-verify.db*
+graphify-out
+npm-debug.log*
+docs
+tests
