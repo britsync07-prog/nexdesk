@@ -799,6 +799,8 @@ async function shopTransactions(request: Request, env: Env, user: User, transact
   }
   if (request.method === "POST") {
     const body = await request.json<Row>();
+    const clientRequestId = String(body.clientRequestId || "").trim() || null;
+    if (clientRequestId) { const existing = await env.DB.prepare("SELECT * FROM ShopTransaction WHERE userId=? AND clientRequestId=?").bind(user.id, clientRequestId).first<Row>(); if (existing) return json({ success: true, transaction: existing }); }
     const method = String(body.method || "") as ShopMethod;
     const enteredBy = user.employeeName || String(body.enteredBy || "").trim();
     const partyName = String(body.partyName || "").trim();
@@ -821,7 +823,7 @@ async function shopTransactions(request: Request, env: Env, user: User, transact
       if (method === "credit_repay" && amountPaisa > partyBalance.payablePaisa) return json({ error: "Repayment cannot exceed the amount you owe this person" }, 400);
     }
     const transaction = { id: id(), dateStr: String(body.dateStr), enteredBy, method, partyName, productName, quantityMilli, unitPricePaisa, amountPaisa, note: String(body.note || "").trim() || null };
-    await env.DB.prepare("INSERT INTO ShopTransaction (id,userId,dateStr,enteredBy,enteredByKey,method,partyName,partyKey,productName,productKey,quantityMilli,unitPricePaisa,amountPaisa,note,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)").bind(transaction.id, user.id, transaction.dateStr, enteredBy, shopKey(enteredBy), method, partyName, shopKey(partyName), productName, productName ? shopKey(productName) : null, quantityMilli, unitPricePaisa, amountPaisa, transaction.note).run();
+    await env.DB.prepare("INSERT INTO ShopTransaction (id,userId,dateStr,enteredBy,enteredByKey,method,partyName,partyKey,productName,productKey,quantityMilli,unitPricePaisa,amountPaisa,clientRequestId,note,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)").bind(transaction.id, user.id, transaction.dateStr, enteredBy, shopKey(enteredBy), method, partyName, shopKey(partyName), productName, productName ? shopKey(productName) : null, quantityMilli, unitPricePaisa, amountPaisa, clientRequestId, transaction.note).run();
     try { await syncShopTransaction(env, user, transaction.id); } catch {}
     return json({ success: true, transaction: { ...transaction, ...shopImpact(method, amountPaisa) } }, 201);
   }

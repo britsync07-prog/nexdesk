@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS ShopTransaction (
   quantityMilli INTEGER,
   unitPricePaisa INTEGER,
   amountPaisa INTEGER NOT NULL,
+  clientRequestId TEXT,
   note TEXT,
   createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -22,6 +23,7 @@ CREATE INDEX IF NOT EXISTS ShopTransaction_user_date ON ShopTransaction(userId, 
 CREATE INDEX IF NOT EXISTS ShopTransaction_user_party ON ShopTransaction(userId, partyKey, dateStr DESC);
 CREATE INDEX IF NOT EXISTS ShopTransaction_user_method ON ShopTransaction(userId, method, dateStr DESC);
 CREATE INDEX IF NOT EXISTS ShopTransaction_user_product ON ShopTransaction(userId, productKey);
+CREATE UNIQUE INDEX IF NOT EXISTS ShopTransaction_user_request ON ShopTransaction(userId, clientRequestId);
 
 CREATE TABLE IF NOT EXISTS ShopGoogleSheet (
   userId TEXT PRIMARY KEY,

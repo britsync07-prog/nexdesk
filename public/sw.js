@@ -1,4 +1,4 @@
-const CACHE_NAME = "shiftlog-cache-v2";
+const CACHE_NAME = "shop-khata-cache-v1";
 const STATIC_ASSETS = [
   "/",
   "/manifest.json",
@@ -42,7 +42,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
   // Account pages can contain private data. Never persist them in the browser cache.
-  if (url.pathname.startsWith("/api/") || url.pathname !== "/" && !url.pathname.startsWith("/_next/") && !url.pathname.startsWith("/icons/")) {
+  if (url.pathname.startsWith("/api/")) {
     return;
   }
 

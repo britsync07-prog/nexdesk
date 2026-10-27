@@ -3,6 +3,7 @@ import { Hanken_Grotesk } from "next/font/google";
 import "./globals.css";
 import { Navigation } from "@/components/navigation";
 import { ShopLanguageProvider } from "@/components/shop-language";
+import { OfflineSync } from "@/components/offline-sync";
 
 const hanken = Hanken_Grotesk({ subsets: ["latin"], variable: "--font-hanken" });
 
@@ -42,7 +43,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: "try { if (localStorage.getItem('nexdesk-theme') === 'dark') document.documentElement.classList.add('theme-dark'); } catch {}" }} />
       </head>
       <body className={`${hanken.variable} min-h-screen bg-[#f2f4f7] text-[#0a0a0a] antialiased flex flex-col`}>
-        <ShopLanguageProvider><Navigation />
+        <ShopLanguageProvider><OfflineSync /><Navigation />
         <main className="flex-1 pb-20 md:pb-0 md:pl-56">{children}</main></ShopLanguageProvider>
 
         {/* Service Worker Registration */}
