@@ -17,7 +17,7 @@ export function ShopPdfExport({ query, language }: { query: URLSearchParams; lan
     autoTable(pdf, {
       startY: 21,
       head: [[t.date, t.enteredBy, t.method, t.party, t.product, t.quantity, t.unitPrice, t.amount, t.note]],
-      body: rows.map((row) => [row.dateStr, row.enteredBy, methodLabel(row.method, language), row.partyName, row.productName || "", row.quantityMilli ? String(row.quantityMilli / 1000) : "", row.unitPricePaisa ? pdfAmount(row.unitPricePaisa) : "", `${isInflow(row.method) ? "+" : isOutflow(row.method) ? "−" : ""}${pdfAmount(row.amountPaisa)}`, row.note || ""]),
+      body: rows.map((row) => [row.dateStr, row.enteredBy, methodLabel(row.method, language), row.partyName, row.productName || "", row.quantityMilli ? String(row.quantityMilli / 1000) : "", row.unitPricePaisa ? pdfAmount(row.unitPricePaisa) : "", `${isInflow(row.method) ? "+" : isOutflow(row.method) ? "-" : ""}${pdfAmount(row.amountPaisa)}`, row.note || ""]),
       styles: { fontSize: 7, cellPadding: 2, textColor: 0, lineColor: 0, lineWidth: 0.1 },
       headStyles: { fillColor: 255, textColor: 0, lineColor: 0, lineWidth: 0.2, fontStyle: "bold" },
       didParseCell: (data) => { if (data.section === "body" && data.column.index === 7) { const method = rows[data.row.index].method; if (isInflow(method)) data.cell.styles.textColor = [36, 123, 80]; if (isOutflow(method)) data.cell.styles.textColor = [196, 36, 42]; } },
