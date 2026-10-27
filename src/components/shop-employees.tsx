@@ -1,0 +1,11 @@
+"use client";
+import { FormEvent, useEffect, useState } from "react";
+import { useShopLanguage } from "@/components/shop-language";
+type Employee = { id: string; username: string };
+export function ShopEmployees() {
+  const { language } = useShopLanguage(); const bn = language === "bn"; const [employees, setEmployees] = useState<Employee[]>([]); const [username, setUsername] = useState(""); const [password, setPassword] = useState(""); const [message, setMessage] = useState("");
+  const load = () => fetch("/api/shop/employees").then((res) => res.json()).then((data) => setEmployees(data.employees || [])).catch(() => {});
+  useEffect(() => { void load(); }, []);
+  async function submit(event: FormEvent) { event.preventDefault(); const res = await fetch("/api/shop/employees", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password }) }); const data = await res.json(); setMessage(res.ok ? (bn ? "কর্মী যোগ করা হয়েছে।" : "Employee added.") : data.error); if (res.ok) { setUsername(""); setPassword(""); load(); } }
+  return <section className="mt-6 rounded-lg border border-[#e6e6e6] bg-white p-5"><h2 className="font-medium">{bn ? "কর্মী হিসাব" : "Employee accounts"}</h2><p className="mt-1 text-sm text-[#6b6b6b]">{bn ? "কর্মীরা তাদের নিজের নাম ও পাসওয়ার্ড দিয়ে লগইন করবেন।" : "Employees sign in with their own username and password."}</p><form onSubmit={submit} className="mt-4 grid gap-3 sm:grid-cols-2"><input value={username} onChange={(e) => setUsername(e.target.value)} placeholder={bn ? "কর্মীর নাম" : "Employee username"} className="h-10 rounded-md border border-[#d4d4d4] px-3 text-sm" required /><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={bn ? "কমপক্ষে ৮ অক্ষরের পাসওয়ার্ড" : "Password (at least 8 characters)"} className="h-10 rounded-md border border-[#d4d4d4] px-3 text-sm" required minLength={8} /><button className="h-10 rounded-md bg-[#141414] px-4 text-sm font-medium text-white sm:col-span-2">{bn ? "কর্মী যোগ করুন" : "Add employee"}</button></form>{message && <p className="mt-3 text-sm text-[#6b6b6b]">{message}</p>}{employees.length > 0 && <div className="mt-4 border-t border-[#e6e6e6] pt-3">{employees.map((employee) => <p key={employee.id} className="py-1 text-sm">{employee.username}</p>)}</div>}</section>;
+}

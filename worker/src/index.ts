@@ -14,6 +14,8 @@ type User = {
   name: string | null;
   image: string | null;
   googleId: string | null;
+  employeeId?: string;
+  employeeName?: string;
 };
 type Row = Record<string, unknown>;
 const encoder = new TextEncoder();
@@ -100,6 +102,28 @@ async function crypt(value: string, secret: string, decrypt = false) {
   );
   return b64(new Uint8Array([...iv, ...body]));
 }
+const employeeUsername = (value: unknown) => String(value || "").trim().replace(/\s+/g, " ");
+const employeeKey = (value: string) => value.toLocaleLowerCase();
+async function employeePasswordHash(password: string, salt: string) {
+  const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
+  return b64(new Uint8Array(await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: bytes(salt), iterations: 120000 }, key, 256)));
+}
+async function employeeLogin(request: Request, env: Env) {
+  const body = await request.json<Row>(); const username = employeeUsername(body.username); const password = String(body.password || "");
+  const employee = await env.DB.prepare("SELECT id,ownerId,username,passwordSalt,passwordHash FROM ShopEmployee WHERE usernameKey=?").bind(employeeKey(username)).first<{ id: string; ownerId: string; username: string; passwordSalt: string; passwordHash: string }>();
+  if (!employee || !password || (await employeePasswordHash(password, employee.passwordSalt)) !== employee.passwordHash) return json({ error: "Invalid username or password" }, 401);
+  return json({ success: true }, 200, { "set-cookie": await sessionCookie(employee.ownerId, env, { id: employee.id, name: employee.username }) });
+}
+async function shopEmployees(request: Request, env: Env, user: User) {
+  if (user.employeeId) return json({ error: "Only the shop owner can manage employees" }, 403);
+  if (request.method === "GET") { const employees = await env.DB.prepare("SELECT id,username,createdAt FROM ShopEmployee WHERE ownerId=? ORDER BY createdAt DESC").bind(user.id).all<Row>(); return json({ employees: employees.results }); }
+  if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  const body = await request.json<Row>(); const username = employeeUsername(body.username); const password = String(body.password || "");
+  if (username.length < 2 || username.length > 60 || password.length < 8 || password.length > 128) return json({ error: "Username must be 2–60 characters and password at least 8 characters" }, 400);
+  const salt = b64(crypto.getRandomValues(new Uint8Array(16)));
+  try { await env.DB.prepare("INSERT INTO ShopEmployee (id,ownerId,username,usernameKey,passwordSalt,passwordHash) VALUES (?,?,?,?,?,?)").bind(id(), user.id, username, employeeKey(username), salt, await employeePasswordHash(password, salt)).run(); } catch { return json({ error: "That username is already in use" }, 409); }
+  return json({ success: true }, 201);
+}
 async function currentUser(request: Request, env: Env): Promise<User | null> {
   const raw = readCookie(request, "nexdesk_session");
   if (!raw) return null;
@@ -107,24 +131,25 @@ async function currentUser(request: Request, env: Env): Promise<User | null> {
   if (!payload) return null;
   try {
     const session = JSON.parse(new TextDecoder().decode(bytes(payload))) as {
-      sub: string;
+      sub: string; employeeId?: string; employeeName?: string;
       exp: number;
     };
     if (session.exp < Date.now()) return null;
-    return await env.DB.prepare(
+    const user = await env.DB.prepare(
       "SELECT id,email,name,image,googleId FROM User WHERE id=?",
     )
       .bind(session.sub)
       .first<User>();
+    return user ? { ...user, employeeId: session.employeeId, employeeName: session.employeeName } : null;
   } catch {
     return null;
   }
 }
-async function sessionCookie(userId: string, env: Env) {
+async function sessionCookie(userId: string, env: Env, employee?: { id: string; name: string }) {
   return cookie(
     "nexdesk_session",
     await signed(
-      b64(JSON.stringify({ sub: userId, exp: Date.now() + 7776000000 })),
+      b64(JSON.stringify({ sub: userId, employeeId: employee?.id, employeeName: employee?.name, exp: Date.now() + 7776000000 })),
       env.SESSION_SECRET,
     ),
     7776000,
@@ -774,7 +799,7 @@ async function shopTransactions(request: Request, env: Env, user: User, transact
   if (request.method === "POST") {
     const body = await request.json<Row>();
     const method = String(body.method || "") as ShopMethod;
-    const enteredBy = String(body.enteredBy || "").trim();
+    const enteredBy = user.employeeName || String(body.enteredBy || "").trim();
     const partyName = String(body.partyName || "").trim();
     if (!validDate(body.dateStr) || !shopMethods.includes(method) || !enteredBy || !partyName) return json({ error: "Invalid transaction fields" }, 400);
     let amountPaisa: number | null;
@@ -1300,6 +1325,7 @@ export default {
     if (url.pathname === "/api/auth/google/url") return oauthStart(request, env);
     if (url.pathname === "/api/auth/google/callback")
       return oauthCallback(request, env, ctx);
+    if (url.pathname === "/api/auth/employee/login" && request.method === "POST") return employeeLogin(request, env);
     const user = await currentUser(request, env);
     if (url.pathname === "/api/auth/session") return json({ user });
     if (url.pathname === "/api/auth/logout" && request.method === "POST")
@@ -1310,6 +1336,7 @@ export default {
     const shopTransaction = url.pathname.match(/^\/api\/shop\/transactions(?:\/([^/]+))?$/);
     const shopContact = url.pathname.match(/^\/api\/shop\/contacts(?:\/([^/]+))?$/);
     if (url.pathname === "/api/shop/suggestions") return shopSuggestions(request, env, user);
+    if (url.pathname === "/api/shop/employees") return shopEmployees(request, env, user);
     if (url.pathname === "/api/shop/sheet") return shopSheet(request, env, user);
     if (url.pathname === "/api/shop/opening-balances") return shopOpeningBalances(request, env, user);
     if (shopTransaction) return shopTransactions(request, env, user, shopTransaction[1]);
