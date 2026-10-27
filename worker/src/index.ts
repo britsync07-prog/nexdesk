@@ -120,8 +120,9 @@ async function shopEmployees(request: Request, env: Env, user: User) {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
   const body = await request.json<Row>(); const username = employeeUsername(body.username); const password = String(body.password || "");
   if (username.length < 2 || username.length > 60 || password.length < 8 || password.length > 128) return json({ error: "Username must be 2–60 characters and password at least 8 characters" }, 400);
+  if (await env.DB.prepare("SELECT id FROM ShopEmployee WHERE usernameKey=?").bind(employeeKey(username)).first()) return json({ error: "That username is already in use" }, 409);
   const salt = b64(crypto.getRandomValues(new Uint8Array(16)));
-  try { await env.DB.prepare("INSERT INTO ShopEmployee (id,ownerId,username,usernameKey,passwordSalt,passwordHash) VALUES (?,?,?,?,?,?)").bind(id(), user.id, username, employeeKey(username), salt, await employeePasswordHash(password, salt)).run(); } catch { return json({ error: "That username is already in use" }, 409); }
+  try { await env.DB.prepare("INSERT INTO ShopEmployee (id,ownerId,username,usernameKey,passwordSalt,passwordHash) VALUES (?,?,?,?,?,?)").bind(id(), user.id, username, employeeKey(username), salt, await employeePasswordHash(password, salt)).run(); } catch (error) { return json({ error: error instanceof Error ? error.message : "Could not create employee" }, 500); }
   return json({ success: true }, 201);
 }
 async function currentUser(request: Request, env: Env): Promise<User | null> {
