@@ -7,9 +7,10 @@ import { useShopLanguage } from "@/components/shop-language";
 
 function SuggestionInput({ field, value, onChange, label, required = true }: { field: "enteredBy" | "party" | "product"; value: string; onChange: (value: string) => void; label: string; required?: boolean }) {
   const [items, setItems] = useState<string[]>([]);
+  const [open, setOpen] = useState(false);
   const id = `shop-${field}`;
   useEffect(() => { const timer = setTimeout(() => fetch(`/api/shop/suggestions?field=${field}&query=${encodeURIComponent(value)}`).then((res) => res.ok ? res.json() : { suggestions: [] }).then((data) => setItems(data.suggestions || []) ).catch(() => {}), 180); return () => clearTimeout(timer); }, [field, value]);
-  return <div><label className="mb-2 block text-sm font-medium text-[#0a0a0a]" htmlFor={id}>{label}{required && <span className="text-[#c4242a]"> *</span>}</label><input id={id} list={`${id}-list`} value={value} onChange={(event) => onChange(event.target.value)} required={required} className="h-10 w-full rounded-md border border-[#d4d4d4] bg-white px-3 text-sm text-[#0a0a0a]" /><datalist id={`${id}-list`}>{items.map((item) => <option key={item} value={item} />)}</datalist></div>;
+  return <div className="relative"><label className="mb-2 block text-sm font-medium text-[#0a0a0a]" htmlFor={id}>{label}{required && <span className="text-[#c4242a]"> *</span>}</label><input id={id} autoComplete="off" value={value} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 120)} onChange={(event) => { onChange(event.target.value); setOpen(true); }} required={required} aria-autocomplete="list" aria-expanded={open && items.length > 0} className="h-10 w-full rounded-md border border-[#d4d4d4] bg-white px-3 text-sm text-[#0a0a0a]" />{open && items.length > 0 && <div role="listbox" className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-[#d4d4d4] bg-white py-1 shadow-lg">{items.map((item) => <button type="button" role="option" key={item} onMouseDown={() => { onChange(item); setOpen(false); }} className="block w-full px-3 py-2 text-left text-sm text-[#0a0a0a] hover:bg-[#f2f4f7]">{item}</button>)}</div>}</div>;
 }
 
 export function ShopTransactionForm() {

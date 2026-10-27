@@ -767,7 +767,7 @@ async function shopContacts(request: Request, env: Env, user: User, partyKey?: s
   const rows = await env.DB.prepare(`SELECT partyName,partyKey,
     COALESCE(SUM(CASE WHEN method='credit_sale' THEN amountPaisa WHEN method='credit_collection' THEN -amountPaisa ELSE 0 END),0) receivablePaisa,
     COALESCE(SUM(CASE WHEN method='credit_purchase' THEN amountPaisa WHEN method='credit_repay' THEN -amountPaisa ELSE 0 END),0) payablePaisa
-    FROM ShopTransaction WHERE userId=? AND partyName LIKE ? GROUP BY partyKey,partyName HAVING receivablePaisa<>0 OR payablePaisa<>0 ORDER BY partyName LIMIT 100`).bind(user.id, `%${query}%`).all<Row>();
+    FROM ShopTransaction WHERE userId=? AND partyName LIKE ? GROUP BY partyKey,partyName ORDER BY partyName LIMIT 100`).bind(user.id, `%${query}%`).all<Row>();
   return json({ contacts: rows.results });
 }
 async function syncInfo(env: Env, user: User) {
