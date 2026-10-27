@@ -1,5 +1,5 @@
 export type ShopLanguage = "en" | "bn";
-export type ShopMethod = "credit_purchase" | "credit_sale" | "cash_sale" | "cash_buy" | "credit_repay" | "credit_collection";
+export type ShopMethod = "credit_purchase" | "credit_sale" | "cash_sale" | "cash_buy" | "credit_repay" | "credit_collection" | "opening_cash" | "opening_receivable" | "opening_payable";
 
 export const methods: ShopMethod[] = ["credit_purchase", "credit_sale", "cash_sale", "cash_buy", "credit_repay", "credit_collection"];
 export const productMethods = new Set<ShopMethod>(["credit_purchase", "credit_sale", "cash_sale", "cash_buy"]);
@@ -21,8 +21,11 @@ export const methodLabel = (method: ShopMethod, language: ShopLanguage) => ({
   cash_buy: language === "bn" ? "নগদ কেনা" : "Cash buy",
   credit_repay: language === "bn" ? "বাকির টাকা পরিশোধ" : "Credit repayment",
   credit_collection: language === "bn" ? "বাকির টাকা আদায়" : "Credit collection",
+  opening_cash: language === "bn" ? "শুরুর নগদ" : "Opening cash",
+  opening_receivable: language === "bn" ? "শুরুর পাওনা" : "Opening receivable",
+  opening_payable: language === "bn" ? "শুরুর দেনা" : "Opening payable",
 }[method]);
 export const money = (paisa: number | string, language: ShopLanguage) => new Intl.NumberFormat(language === "bn" ? "bn-BD" : "en-BD", { style: "currency", currency: "BDT", minimumFractionDigits: 2 }).format(Number(paisa || 0) / 100);
 export const dateText = (date: string, language: ShopLanguage) => new Intl.DateTimeFormat(language === "bn" ? "bn-BD" : "en-BD", { year: "numeric", month: "short", day: "numeric" }).format(new Date(`${date}T00:00:00`));
-export const isInflow = (method: ShopMethod) => method === "cash_sale" || method === "credit_collection";
+export const isInflow = (method: ShopMethod) => method === "cash_sale" || method === "credit_collection" || method === "opening_cash";
 export const isOutflow = (method: ShopMethod) => method === "cash_buy" || method === "credit_repay";

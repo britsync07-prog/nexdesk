@@ -28,6 +28,9 @@ export function ShopTransactions() {
   const [rows, setRows] = useState<Row[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [partySuggestions, setPartySuggestions] = useState<string[]>([]);
+  const [productSuggestions, setProductSuggestions] = useState<string[]>([]);
+  const [openSuggestion, setOpenSuggestion] = useState<"party" | "product" | null>(null);
   const [filters, setFilters] = useState({
     date: "",
     startDate: "",
@@ -51,6 +54,8 @@ export function ShopTransactions() {
       })
       .catch(() => {});
   }, [filters, page]);
+  useEffect(() => { const timer = setTimeout(() => fetch(`/api/shop/suggestions?field=party&query=${encodeURIComponent(filters.party)}`).then((res) => res.json()).then((data) => setPartySuggestions(data.suggestions || []) ).catch(() => {}), 160); return () => clearTimeout(timer); }, [filters.party]);
+  useEffect(() => { const timer = setTimeout(() => fetch(`/api/shop/suggestions?field=product&query=${encodeURIComponent(filters.product)}`).then((res) => res.json()).then((data) => setProductSuggestions(data.suggestions || []) ).catch(() => {}), 160); return () => clearTimeout(timer); }, [filters.product]);
   const update = (key: keyof typeof filters, value: string) => {
     setPage(1);
     setFilters((current) => ({ ...current, [key]: value }));
@@ -87,18 +92,8 @@ export function ShopTransactions() {
             </option>
           ))}
         </select>
-        <input
-          value={filters.party}
-          onChange={(e) => update("party", e.target.value)}
-          placeholder={t.party}
-          className="h-9 rounded-md border border-[#d4d4d4] px-2 text-sm"
-        />
-        <input
-          value={filters.product}
-          onChange={(e) => update("product", e.target.value)}
-          placeholder={t.product}
-          className="h-9 rounded-md border border-[#d4d4d4] px-2 text-sm"
-        />
+        <div className="relative"><input value={filters.party} onFocus={() => setOpenSuggestion("party")} onBlur={() => setTimeout(() => setOpenSuggestion(null), 120)} onChange={(e) => update("party", e.target.value)} placeholder={t.party} className="h-9 w-full rounded-md border border-[#d4d4d4] px-2 text-sm" />{openSuggestion === "party" && partySuggestions.length > 0 && <div className="absolute z-30 mt-1 max-h-48 w-full overflow-auto rounded-md border border-[#d4d4d4] bg-white py-1 shadow-lg">{partySuggestions.map((item) => <button type="button" key={item} onMouseDown={() => { update("party", item); setOpenSuggestion(null); }} className="block w-full px-3 py-2 text-left text-sm hover:bg-[#f2f4f7]">{item}</button>)}</div>}</div>
+        <div className="relative"><input value={filters.product} onFocus={() => setOpenSuggestion("product")} onBlur={() => setTimeout(() => setOpenSuggestion(null), 120)} onChange={(e) => update("product", e.target.value)} placeholder={t.product} className="h-9 w-full rounded-md border border-[#d4d4d4] px-2 text-sm" />{openSuggestion === "product" && productSuggestions.length > 0 && <div className="absolute z-30 mt-1 max-h-48 w-full overflow-auto rounded-md border border-[#d4d4d4] bg-white py-1 shadow-lg">{productSuggestions.map((item) => <button type="button" key={item} onMouseDown={() => { update("product", item); setOpenSuggestion(null); }} className="block w-full px-3 py-2 text-left text-sm hover:bg-[#f2f4f7]">{item}</button>)}</div>}</div>
         <input
           type="date"
           aria-label={t.startDate}

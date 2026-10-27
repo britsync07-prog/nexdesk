@@ -653,6 +653,7 @@ async function suggestions(request: Request, env: Env, user: User) {
 
 const shopMethods = ["credit_purchase", "credit_sale", "cash_sale", "cash_buy", "credit_repay", "credit_collection"] as const;
 type ShopMethod = (typeof shopMethods)[number];
+type ShopLedgerMethod = ShopMethod | "opening_cash" | "opening_receivable" | "opening_payable";
 const shopProductMethods = new Set<ShopMethod>(["credit_purchase", "credit_sale", "cash_sale", "cash_buy"]);
 const shopKey = (value: string) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
 const shopPaisa = (value: unknown) => {
@@ -669,10 +670,10 @@ const shopQuantity = (value: unknown) => {
   const result = Number(whole) * 1000 + Number((fraction + "000").slice(0, 3));
   return Number.isSafeInteger(result) && result > 0 ? result : null;
 };
-const shopImpact = (method: ShopMethod, amountPaisa: number) => ({
-  cashPaisa: method === "cash_sale" || method === "credit_collection" ? amountPaisa : method === "cash_buy" || method === "credit_repay" ? -amountPaisa : 0,
-  receivablePaisa: method === "credit_sale" ? amountPaisa : method === "credit_collection" ? -amountPaisa : 0,
-  payablePaisa: method === "credit_purchase" ? amountPaisa : method === "credit_repay" ? -amountPaisa : 0,
+const shopImpact = (method: ShopLedgerMethod, amountPaisa: number) => ({
+  cashPaisa: method === "cash_sale" || method === "credit_collection" || method === "opening_cash" ? amountPaisa : method === "cash_buy" || method === "credit_repay" ? -amountPaisa : 0,
+  receivablePaisa: method === "credit_sale" || method === "opening_receivable" ? amountPaisa : method === "credit_collection" ? -amountPaisa : 0,
+  payablePaisa: method === "credit_purchase" || method === "opening_payable" ? amountPaisa : method === "credit_repay" ? -amountPaisa : 0,
 });
 function shopWhere(url: URL, user: User) {
   const params: unknown[] = [user.id];
@@ -689,9 +690,9 @@ function shopWhere(url: URL, user: User) {
 }
 async function shopBalance(env: Env, user: User, where = " WHERE userId=?", params: unknown[] = [user.id]) {
   const row = await env.DB.prepare(`SELECT
-    COALESCE(SUM(CASE WHEN method IN ('cash_sale','credit_collection') THEN amountPaisa WHEN method IN ('cash_buy','credit_repay') THEN -amountPaisa ELSE 0 END),0) cashPaisa,
-    COALESCE(SUM(CASE WHEN method='credit_sale' THEN amountPaisa WHEN method='credit_collection' THEN -amountPaisa ELSE 0 END),0) receivablePaisa,
-    COALESCE(SUM(CASE WHEN method='credit_purchase' THEN amountPaisa WHEN method='credit_repay' THEN -amountPaisa ELSE 0 END),0) payablePaisa
+    COALESCE(SUM(CASE WHEN method IN ('cash_sale','credit_collection','opening_cash') THEN amountPaisa WHEN method IN ('cash_buy','credit_repay') THEN -amountPaisa ELSE 0 END),0) cashPaisa,
+    COALESCE(SUM(CASE WHEN method IN ('credit_sale','opening_receivable') THEN amountPaisa WHEN method='credit_collection' THEN -amountPaisa ELSE 0 END),0) receivablePaisa,
+    COALESCE(SUM(CASE WHEN method IN ('credit_purchase','opening_payable') THEN amountPaisa WHEN method='credit_repay' THEN -amountPaisa ELSE 0 END),0) payablePaisa
     FROM ShopTransaction${where}`).bind(...params).first<Row>();
   return { cashPaisa: Number(row?.cashPaisa || 0), receivablePaisa: Number(row?.receivablePaisa || 0), payablePaisa: Number(row?.payablePaisa || 0) };
 }
@@ -703,6 +704,22 @@ async function shopSuggestions(request: Request, env: Env, user: User) {
   const query = (url.searchParams.get("query") || "").trim();
   const result = await env.DB.prepare(`SELECT DISTINCT ${column} value FROM ShopTransaction WHERE userId=? AND ${column} IS NOT NULL AND ${column} LIKE ? ORDER BY CASE WHEN ${column} LIKE ? THEN 0 ELSE 1 END, ${column} LIMIT 10`).bind(user.id, `%${query}%`, `${query}%`).all<Row>();
   return json({ suggestions: result.results.map((row) => row.value) });
+}
+async function shopOpeningBalances(request: Request, env: Env, user: User) {
+  if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  const body = await request.json<Row>();
+  const cash = shopPaisa(body.cash);
+  const receivable = shopPaisa(body.receivable);
+  const payable = shopPaisa(body.payable);
+  const partyName = String(body.partyName || "").trim();
+  if ((!cash && !receivable && !payable) || ((receivable || payable) && !partyName)) return json({ error: "Enter an amount and a customer or supplier where needed" }, 400);
+  const dateStr = validDate(body.dateStr) ? String(body.dateStr) : new Date().toISOString().slice(0, 10);
+  const entries: [ShopLedgerMethod, number, string][] = [];
+  if (cash) entries.push(["opening_cash", cash, "Opening cash"]);
+  if (receivable) entries.push(["opening_receivable", receivable, partyName]);
+  if (payable) entries.push(["opening_payable", payable, partyName]);
+  await env.DB.batch(entries.map(([method, amountPaisa, party]) => env.DB.prepare("INSERT INTO ShopTransaction (id,userId,dateStr,enteredBy,enteredByKey,method,partyName,partyKey,amountPaisa,note,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)").bind(id(), user.id, dateStr, "Opening balance", shopKey("Opening balance"), method, party, shopKey(party), amountPaisa, "Opening balance")));
+  return json({ success: true }, 201);
 }
 async function shopTransactions(request: Request, env: Env, user: User, transactionId?: string) {
   if (request.method === "DELETE" && transactionId) {
@@ -748,7 +765,7 @@ async function shopTransactions(request: Request, env: Env, user: User, transact
   const [count, rows, filtered] = await env.DB.batch([
     env.DB.prepare(`SELECT COUNT(*) total FROM ShopTransaction${where}`).bind(...params),
     env.DB.prepare(`SELECT * FROM ShopTransaction${where} ORDER BY dateStr DESC,createdAt DESC LIMIT ? OFFSET ?`).bind(...params, limit, offset),
-    env.DB.prepare(`SELECT COALESCE(SUM(CASE WHEN method IN ('cash_sale','credit_collection') THEN amountPaisa WHEN method IN ('cash_buy','credit_repay') THEN -amountPaisa ELSE 0 END),0) cashPaisa, COALESCE(SUM(CASE WHEN method='credit_sale' THEN amountPaisa WHEN method='credit_collection' THEN -amountPaisa ELSE 0 END),0) receivablePaisa, COALESCE(SUM(CASE WHEN method='credit_purchase' THEN amountPaisa WHEN method='credit_repay' THEN -amountPaisa ELSE 0 END),0) payablePaisa FROM ShopTransaction${where}`).bind(...params),
+    env.DB.prepare(`SELECT COALESCE(SUM(CASE WHEN method IN ('cash_sale','credit_collection','opening_cash') THEN amountPaisa WHEN method IN ('cash_buy','credit_repay') THEN -amountPaisa ELSE 0 END),0) cashPaisa, COALESCE(SUM(CASE WHEN method IN ('credit_sale','opening_receivable') THEN amountPaisa WHEN method='credit_collection' THEN -amountPaisa ELSE 0 END),0) receivablePaisa, COALESCE(SUM(CASE WHEN method IN ('credit_purchase','opening_payable') THEN amountPaisa WHEN method='credit_repay' THEN -amountPaisa ELSE 0 END),0) payablePaisa FROM ShopTransaction${where}`).bind(...params),
   ]);
   const globalBalance = await shopBalance(env, user);
   const filterBalance = filtered.results[0] as Row | undefined;
@@ -765,9 +782,9 @@ async function shopContacts(request: Request, env: Env, user: User, partyKey?: s
   }
   const query = (url.searchParams.get("query") || "").trim();
   const rows = await env.DB.prepare(`SELECT partyName,partyKey,
-    COALESCE(SUM(CASE WHEN method='credit_sale' THEN amountPaisa WHEN method='credit_collection' THEN -amountPaisa ELSE 0 END),0) receivablePaisa,
-    COALESCE(SUM(CASE WHEN method='credit_purchase' THEN amountPaisa WHEN method='credit_repay' THEN -amountPaisa ELSE 0 END),0) payablePaisa
-    FROM ShopTransaction WHERE userId=? AND partyName LIKE ? GROUP BY partyKey,partyName ORDER BY partyName LIMIT 100`).bind(user.id, `%${query}%`).all<Row>();
+    COALESCE(SUM(CASE WHEN method IN ('credit_sale','opening_receivable') THEN amountPaisa WHEN method='credit_collection' THEN -amountPaisa ELSE 0 END),0) receivablePaisa,
+    COALESCE(SUM(CASE WHEN method IN ('credit_purchase','opening_payable') THEN amountPaisa WHEN method='credit_repay' THEN -amountPaisa ELSE 0 END),0) payablePaisa
+    FROM ShopTransaction WHERE userId=? AND partyName LIKE ? AND method<>'opening_cash' GROUP BY partyKey,partyName ORDER BY partyName LIMIT 100`).bind(user.id, `%${query}%`).all<Row>();
   return json({ contacts: rows.results });
 }
 async function syncInfo(env: Env, user: User) {
@@ -1247,6 +1264,7 @@ export default {
     const shopTransaction = url.pathname.match(/^\/api\/shop\/transactions(?:\/([^/]+))?$/);
     const shopContact = url.pathname.match(/^\/api\/shop\/contacts(?:\/([^/]+))?$/);
     if (url.pathname === "/api/shop/suggestions") return shopSuggestions(request, env, user);
+    if (url.pathname === "/api/shop/opening-balances") return shopOpeningBalances(request, env, user);
     if (shopTransaction) return shopTransactions(request, env, user, shopTransaction[1]);
     if (shopContact && request.method === "GET") return shopContacts(request, env, user, shopContact[1]);
     const record = url.pathname.match(/^\/api\/records(?:\/([^/]+))?$/);
