@@ -179,7 +179,7 @@ async function oauthStart(request: Request, env: Env) {
     },
   );
 }
-async function oauthCallback(request: Request, env: Env) {
+async function oauthCallback(request: Request, env: Env, ctx?: ExecutionContext) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
@@ -288,6 +288,7 @@ async function oauthCallback(request: Request, env: Env) {
     )
       .bind(id(), user.id, access, refresh, expiry, tokens.scope || null)
       .run();
+  ctx?.waitUntil((async () => { try { await ensureShopSheet(env, user); await syncAllShopTransactions(env, user); } catch {} })());
   return new Response(null, {
     status: 302,
     headers: {
@@ -710,6 +711,9 @@ async function ensureShopSheet(env: Env, user: User) {
   const saved = await env.DB.prepare("SELECT spreadsheetId FROM ShopGoogleSheet WHERE userId=?").bind(user.id).first<{ spreadsheetId: string }>();
   if (saved?.spreadsheetId) return saved.spreadsheetId;
   const token = await googleToken(env, user);
+  const found = await fetch(`https://www.googleapis.com/drive/v3/files?${new URLSearchParams({ q: "name = 'Shop Ledger Records' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false", fields: "files(id)", orderBy: "modifiedTime desc", pageSize: "1" })}`, { headers: { authorization: `Bearer ${token}` } });
+  const existing = found.ok ? ((await found.json()) as { files?: { id: string }[] }).files?.[0] : null;
+  if (existing) { await env.DB.prepare("INSERT OR REPLACE INTO ShopGoogleSheet (userId,spreadsheetId,updatedAt) VALUES (?,?,CURRENT_TIMESTAMP)").bind(user.id, existing.id).run(); return existing.id; }
   const created = await fetch("https://sheets.googleapis.com/v4/spreadsheets", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ properties: { title: "Shop Ledger Records" }, sheets: [{ properties: { title: "Transactions" } }] }) });
   if (!created.ok) throw new Error("Unable to create the shop spreadsheet.");
   const sheet = await created.json() as { spreadsheetId: string };
@@ -723,8 +727,17 @@ async function syncShopTransaction(env: Env, user: User, transactionId: string) 
   if (!record) return;
   const spreadsheetId = await ensureShopSheet(env, user); const token = await googleToken(env, user);
   const row = [record.id, record.dateStr, record.enteredBy, record.method, record.partyName, record.productName || "", record.quantityMilli ? Number(record.quantityMilli) / 1000 : "", record.unitPricePaisa ? Number(record.unitPricePaisa) / 100 : "", Number(record.amountPaisa) / 100, record.note || ""];
-  const written = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Transactions!A1:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ values: [row] }) });
+  const ids = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Transactions!A:A`, { headers: { authorization: `Bearer ${token}` } });
+  const values = ids.ok ? ((await ids.json()) as { values?: string[][] }).values || [] : [];
+  const index = values.findIndex((value, position) => position > 0 && value[0] === record.id);
+  const written = index > 0
+    ? await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Transactions!A${index + 1}?valueInputOption=USER_ENTERED`, { method: "PUT", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ values: [row] }) })
+    : await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Transactions!A1:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ values: [row] }) });
   if (!written.ok) throw new Error("Unable to write to the shop spreadsheet.");
+}
+async function syncAllShopTransactions(env: Env, user: User) {
+  const rows = await env.DB.prepare("SELECT id FROM ShopTransaction WHERE userId=? ORDER BY dateStr,createdAt LIMIT 5000").bind(user.id).all<{ id: string }>();
+  for (const row of rows.results) await syncShopTransaction(env, user, row.id);
 }
 async function shopSheet(request: Request, env: Env, user: User) {
   let spreadsheetId = (await env.DB.prepare("SELECT spreadsheetId FROM ShopGoogleSheet WHERE userId=?").bind(user.id).first<{ spreadsheetId: string }>())?.spreadsheetId;
@@ -1283,7 +1296,7 @@ export default {
     if (url.pathname === "/api/health") return json({ status: "ok" });
     if (url.pathname === "/api/auth/google/url") return oauthStart(request, env);
     if (url.pathname === "/api/auth/google/callback")
-      return oauthCallback(request, env);
+      return oauthCallback(request, env, ctx);
     const user = await currentUser(request, env);
     if (url.pathname === "/api/auth/session") return json({ user });
     if (url.pathname === "/api/auth/logout" && request.method === "POST")
