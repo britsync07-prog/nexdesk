@@ -5,6 +5,7 @@ export interface Env {
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
   APP_ORIGIN: string;
+  APP_ORIGINS?: string;
 }
 
 type User = {
@@ -133,7 +134,13 @@ const validDate = (value: unknown) =>
   typeof value === "string" &&
   /^\d{4}-\d{2}-\d{2}$/.test(value) &&
   !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
-const origin = (env: Env) => env.APP_ORIGIN.replace(/\/$/, "");
+const origin = (env: Env, request?: Request) => {
+  const requested = request?.headers.get("x-nexdesk-origin")?.replace(/\/$/, "");
+  const allowed = [env.APP_ORIGIN, ...(env.APP_ORIGINS || "").split(",")]
+    .map((value) => value.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+  return requested && allowed.includes(requested) ? requested : env.APP_ORIGIN.replace(/\/$/, "");
+};
 const googleScopes = [
   "openid",
   "https://www.googleapis.com/auth/userinfo.email",
@@ -142,11 +149,11 @@ const googleScopes = [
   "https://www.googleapis.com/auth/spreadsheets",
 ].join(" ");
 
-async function oauthStart(env: Env) {
+async function oauthStart(request: Request, env: Env) {
   if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET)
     return json({ configured: false, url: null, demoEnabled: false });
   const state = b64(crypto.getRandomValues(new Uint8Array(24)));
-  const callback = `${origin(env)}/api/auth/google/callback`;
+  const callback = `${origin(env, request)}/api/auth/google/callback`;
   const query = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID,
     redirect_uri: callback,
@@ -179,7 +186,7 @@ async function oauthCallback(request: Request, env: Env) {
   const saved = readCookie(request, "nexdesk_oauth");
   const fail = (message: string) =>
     Response.redirect(
-      `${origin(env)}/login?error=${encodeURIComponent(message)}`,
+      `${origin(env, request)}/login?error=${encodeURIComponent(message)}`,
       302,
     );
   if (
@@ -196,7 +203,7 @@ async function oauthCallback(request: Request, env: Env) {
       code,
       client_id: env.GOOGLE_CLIENT_ID,
       client_secret: env.GOOGLE_CLIENT_SECRET,
-      redirect_uri: `${origin(env)}/api/auth/google/callback`,
+      redirect_uri: `${origin(env, request)}/api/auth/google/callback`,
       grant_type: "authorization_code",
     }),
   });
@@ -642,6 +649,126 @@ async function suggestions(request: Request, env: Env, user: User) {
           .bind(user.id, `%${query}%`)
           .all<{ value: string }>();
   return json({ suggestions: result.results.map((entry) => entry.value) });
+}
+
+const shopMethods = ["credit_purchase", "credit_sale", "cash_sale", "cash_buy", "credit_repay", "credit_collection"] as const;
+type ShopMethod = (typeof shopMethods)[number];
+const shopProductMethods = new Set<ShopMethod>(["credit_purchase", "credit_sale", "cash_sale", "cash_buy"]);
+const shopKey = (value: string) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+const shopPaisa = (value: unknown) => {
+  const text = String(value ?? "").trim();
+  if (!/^\d+(?:\.\d{1,2})?$/.test(text)) return null;
+  const [whole, fraction = ""] = text.split(".");
+  const result = Number(whole) * 100 + Number((fraction + "00").slice(0, 2));
+  return Number.isSafeInteger(result) && result > 0 ? result : null;
+};
+const shopQuantity = (value: unknown) => {
+  const text = String(value ?? "").trim();
+  if (!/^\d+(?:\.\d{1,3})?$/.test(text)) return null;
+  const [whole, fraction = ""] = text.split(".");
+  const result = Number(whole) * 1000 + Number((fraction + "000").slice(0, 3));
+  return Number.isSafeInteger(result) && result > 0 ? result : null;
+};
+const shopImpact = (method: ShopMethod, amountPaisa: number) => ({
+  cashPaisa: method === "cash_sale" || method === "credit_collection" ? amountPaisa : method === "cash_buy" || method === "credit_repay" ? -amountPaisa : 0,
+  receivablePaisa: method === "credit_sale" ? amountPaisa : method === "credit_collection" ? -amountPaisa : 0,
+  payablePaisa: method === "credit_purchase" ? amountPaisa : method === "credit_repay" ? -amountPaisa : 0,
+});
+function shopWhere(url: URL, user: User) {
+  const params: unknown[] = [user.id];
+  let where = " WHERE userId=?";
+  for (const [column, query] of [["dateStr", "date"], ["method", "method"], ["partyName", "party"], ["enteredBy", "enteredBy"], ["productName", "product"]] as const) {
+    const value = url.searchParams.get(query)?.trim();
+    if (!value || value === "all") continue;
+    where += column === "dateStr" || column === "method" ? ` AND ${column}=?` : ` AND ${column} LIKE ?`;
+    params.push(column === "dateStr" || column === "method" ? value : `%${value}%`);
+  }
+  if (url.searchParams.get("startDate")) { where += " AND dateStr>=?"; params.push(url.searchParams.get("startDate")); }
+  if (url.searchParams.get("endDate")) { where += " AND dateStr<=?"; params.push(url.searchParams.get("endDate")); }
+  return { where, params };
+}
+async function shopBalance(env: Env, user: User, where = " WHERE userId=?", params: unknown[] = [user.id]) {
+  const row = await env.DB.prepare(`SELECT
+    COALESCE(SUM(CASE WHEN method IN ('cash_sale','credit_collection') THEN amountPaisa WHEN method IN ('cash_buy','credit_repay') THEN -amountPaisa ELSE 0 END),0) cashPaisa,
+    COALESCE(SUM(CASE WHEN method='credit_sale' THEN amountPaisa WHEN method='credit_collection' THEN -amountPaisa ELSE 0 END),0) receivablePaisa,
+    COALESCE(SUM(CASE WHEN method='credit_purchase' THEN amountPaisa WHEN method='credit_repay' THEN -amountPaisa ELSE 0 END),0) payablePaisa
+    FROM ShopTransaction${where}`).bind(...params).first<Row>();
+  return { cashPaisa: Number(row?.cashPaisa || 0), receivablePaisa: Number(row?.receivablePaisa || 0), payablePaisa: Number(row?.payablePaisa || 0) };
+}
+async function shopSuggestions(request: Request, env: Env, user: User) {
+  const url = new URL(request.url);
+  const field = url.searchParams.get("field");
+  const column = field === "enteredBy" ? "enteredBy" : field === "party" ? "partyName" : field === "product" ? "productName" : null;
+  if (!column) return json({ error: "Invalid field" }, 400);
+  const query = (url.searchParams.get("query") || "").trim();
+  const result = await env.DB.prepare(`SELECT DISTINCT ${column} value FROM ShopTransaction WHERE userId=? AND ${column} IS NOT NULL AND ${column} LIKE ? ORDER BY CASE WHEN ${column} LIKE ? THEN 0 ELSE 1 END, ${column} LIMIT 10`).bind(user.id, `%${query}%`, `${query}%`).all<Row>();
+  return json({ suggestions: result.results.map((row) => row.value) });
+}
+async function shopTransactions(request: Request, env: Env, user: User, transactionId?: string) {
+  if (request.method === "DELETE" && transactionId) {
+    await env.DB.prepare("DELETE FROM ShopTransaction WHERE id=? AND userId=?").bind(transactionId, user.id).run();
+    return json({ success: true });
+  }
+  if (request.method === "POST") {
+    const body = await request.json<Row>();
+    const method = String(body.method || "") as ShopMethod;
+    const enteredBy = String(body.enteredBy || "").trim();
+    const partyName = String(body.partyName || "").trim();
+    if (!validDate(body.dateStr) || !shopMethods.includes(method) || !enteredBy || !partyName) return json({ error: "Invalid transaction fields" }, 400);
+    let amountPaisa: number | null;
+    let quantityMilli: number | null = null;
+    let unitPricePaisa: number | null = null;
+    let productName: string | null = null;
+    if (shopProductMethods.has(method)) {
+      productName = String(body.productName || "").trim();
+      quantityMilli = shopQuantity(body.quantity);
+      unitPricePaisa = shopPaisa(body.unitPrice);
+      amountPaisa = quantityMilli && unitPricePaisa ? Math.round((quantityMilli * unitPricePaisa) / 1000) : null;
+      if (!productName || !amountPaisa) return json({ error: "Product, quantity, and unit price are required" }, 400);
+    } else {
+      amountPaisa = shopPaisa(body.amount);
+      if (!amountPaisa) return json({ error: "A valid amount is required" }, 400);
+      const partyBalance = await shopBalance(env, user, " WHERE userId=? AND partyKey=?", [user.id, shopKey(partyName)]);
+      if (method === "credit_collection" && amountPaisa > partyBalance.receivablePaisa) return json({ error: "Collection cannot exceed this person's due amount" }, 400);
+      if (method === "credit_repay" && amountPaisa > partyBalance.payablePaisa) return json({ error: "Repayment cannot exceed the amount you owe this person" }, 400);
+    }
+    const transaction = { id: id(), dateStr: String(body.dateStr), enteredBy, method, partyName, productName, quantityMilli, unitPricePaisa, amountPaisa, note: String(body.note || "").trim() || null };
+    await env.DB.prepare("INSERT INTO ShopTransaction (id,userId,dateStr,enteredBy,enteredByKey,method,partyName,partyKey,productName,productKey,quantityMilli,unitPricePaisa,amountPaisa,note,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)").bind(transaction.id, user.id, transaction.dateStr, enteredBy, shopKey(enteredBy), method, partyName, shopKey(partyName), productName, productName ? shopKey(productName) : null, quantityMilli, unitPricePaisa, amountPaisa, transaction.note).run();
+    return json({ success: true, transaction: { ...transaction, ...shopImpact(method, amountPaisa) } }, 201);
+  }
+  if (transactionId) {
+    const transaction = await env.DB.prepare("SELECT * FROM ShopTransaction WHERE id=? AND userId=?").bind(transactionId, user.id).first<Row>();
+    return transaction ? json({ transaction: { ...transaction, ...shopImpact(String(transaction.method) as ShopMethod, Number(transaction.amountPaisa)) } }) : json({ error: "Not found" }, 404);
+  }
+  const url = new URL(request.url);
+  const { where, params } = shopWhere(url, user);
+  const maximum = url.searchParams.get("export") === "pdf" ? 5000 : 100;
+  const limit = Math.min(Math.max(Number.parseInt(url.searchParams.get("limit") || "50", 10) || 50, 1), maximum);
+  const offset = Math.max(Number.parseInt(url.searchParams.get("offset") || "0", 10) || 0, 0);
+  const [count, rows, filtered] = await env.DB.batch([
+    env.DB.prepare(`SELECT COUNT(*) total FROM ShopTransaction${where}`).bind(...params),
+    env.DB.prepare(`SELECT * FROM ShopTransaction${where} ORDER BY dateStr DESC,createdAt DESC LIMIT ? OFFSET ?`).bind(...params, limit, offset),
+    env.DB.prepare(`SELECT COALESCE(SUM(CASE WHEN method IN ('cash_sale','credit_collection') THEN amountPaisa WHEN method IN ('cash_buy','credit_repay') THEN -amountPaisa ELSE 0 END),0) cashPaisa, COALESCE(SUM(CASE WHEN method='credit_sale' THEN amountPaisa WHEN method='credit_collection' THEN -amountPaisa ELSE 0 END),0) receivablePaisa, COALESCE(SUM(CASE WHEN method='credit_purchase' THEN amountPaisa WHEN method='credit_repay' THEN -amountPaisa ELSE 0 END),0) payablePaisa FROM ShopTransaction${where}`).bind(...params),
+  ]);
+  const globalBalance = await shopBalance(env, user);
+  const filterBalance = filtered.results[0] as Row | undefined;
+  return json({ total: Number((count.results[0] as Row | undefined)?.total || 0), limit, offset, balance: globalBalance, filterBalance: { cashPaisa: Number(filterBalance?.cashPaisa || 0), receivablePaisa: Number(filterBalance?.receivablePaisa || 0), payablePaisa: Number(filterBalance?.payablePaisa || 0) }, transactions: (rows.results as Row[]).map((row) => ({ ...row, ...shopImpact(String(row.method) as ShopMethod, Number(row.amountPaisa)) })) });
+}
+async function shopContacts(request: Request, env: Env, user: User, partyKey?: string) {
+  const url = new URL(request.url);
+  if (partyKey) {
+    const key = shopKey(decodeURIComponent(partyKey));
+    const transactions = await env.DB.prepare("SELECT * FROM ShopTransaction WHERE userId=? AND partyKey=? ORDER BY dateStr DESC,createdAt DESC").bind(user.id, key).all<Row>();
+    if (!transactions.results.length) return json({ error: "Not found" }, 404);
+    const balance = await shopBalance(env, user, " WHERE userId=? AND partyKey=?", [user.id, key]);
+    return json({ partyName: transactions.results[0].partyName, balance, transactions: transactions.results.map((row) => ({ ...row, ...shopImpact(String(row.method) as ShopMethod, Number(row.amountPaisa)) })) });
+  }
+  const query = (url.searchParams.get("query") || "").trim();
+  const rows = await env.DB.prepare(`SELECT partyName,partyKey,
+    COALESCE(SUM(CASE WHEN method='credit_sale' THEN amountPaisa WHEN method='credit_collection' THEN -amountPaisa ELSE 0 END),0) receivablePaisa,
+    COALESCE(SUM(CASE WHEN method='credit_purchase' THEN amountPaisa WHEN method='credit_repay' THEN -amountPaisa ELSE 0 END),0) payablePaisa
+    FROM ShopTransaction WHERE userId=? AND partyName LIKE ? GROUP BY partyKey,partyName HAVING receivablePaisa<>0 OR payablePaisa<>0 ORDER BY partyName LIMIT 100`).bind(user.id, `%${query}%`).all<Row>();
+  return json({ contacts: rows.results });
 }
 async function syncInfo(env: Env, user: User) {
   const integration = await env.DB.prepare(
@@ -1107,7 +1234,7 @@ export default {
         },
       });
     if (url.pathname === "/api/health") return json({ status: "ok" });
-    if (url.pathname === "/api/auth/google/url") return oauthStart(env);
+    if (url.pathname === "/api/auth/google/url") return oauthStart(request, env);
     if (url.pathname === "/api/auth/google/callback")
       return oauthCallback(request, env);
     const user = await currentUser(request, env);
@@ -1117,6 +1244,11 @@ export default {
         "set-cookie": cookie("nexdesk_session", "", 0),
       });
     if (!user) return json({ error: "Unauthorized" }, 401);
+    const shopTransaction = url.pathname.match(/^\/api\/shop\/transactions(?:\/([^/]+))?$/);
+    const shopContact = url.pathname.match(/^\/api\/shop\/contacts(?:\/([^/]+))?$/);
+    if (url.pathname === "/api/shop/suggestions") return shopSuggestions(request, env, user);
+    if (shopTransaction) return shopTransactions(request, env, user, shopTransaction[1]);
+    if (shopContact && request.method === "GET") return shopContacts(request, env, user, shopContact[1]);
     const record = url.pathname.match(/^\/api\/records(?:\/([^/]+))?$/);
     const column = url.pathname.match(/^\/api\/custom-columns(?:\/([^/]+))?$/);
     if (record && !record[1] && request.method === "GET")

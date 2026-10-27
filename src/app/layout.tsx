@@ -2,17 +2,18 @@ import type { Metadata, Viewport } from "next";
 import { Hanken_Grotesk } from "next/font/google";
 import "./globals.css";
 import { Navigation } from "@/components/navigation";
+import { ShopLanguageProvider } from "@/components/shop-language";
 
 const hanken = Hanken_Grotesk({ subsets: ["latin"], variable: "--font-hanken" });
 
 export const metadata: Metadata = {
-  title: "NexDesk - Factory Shift Records",
-  description: "Mobile-first production record-management PWA for factory shift supervisors.",
+  title: "Shop Khata - Shop Ledger",
+  description: "Bilingual shop cash, due, and debt ledger.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "NexDesk",
+    title: "Shop Khata",
   },
   icons: {
     icon: "/icons/icon-192.png",
@@ -40,9 +41,9 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
         <script dangerouslySetInnerHTML={{ __html: "try { if (localStorage.getItem('nexdesk-theme') === 'dark') document.documentElement.classList.add('theme-dark'); } catch {}" }} />
       </head>
-      <body className={`${hanken.variable} min-h-screen bg-[#e4eae6] text-[#131416] antialiased selection:bg-[#1b6c80] selection:text-white flex flex-col`}>
-        <Navigation />
-        <main className="flex-1 pb-20 md:pb-8">{children}</main>
+      <body className={`${hanken.variable} min-h-screen bg-[#f2f4f7] text-[#0a0a0a] antialiased flex flex-col`}>
+        <ShopLanguageProvider><Navigation />
+        <main className="flex-1 pb-20 md:pb-0 md:pl-56">{children}</main></ShopLanguageProvider>
 
         {/* Service Worker Registration */}
         <script
