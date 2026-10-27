@@ -705,6 +705,27 @@ async function shopSuggestions(request: Request, env: Env, user: User) {
   const result = await env.DB.prepare(`SELECT DISTINCT ${column} value FROM ShopTransaction WHERE userId=? AND ${column} IS NOT NULL AND ${column} LIKE ? ORDER BY CASE WHEN ${column} LIKE ? THEN 0 ELSE 1 END, ${column} LIMIT 10`).bind(user.id, `%${query}%`, `${query}%`).all<Row>();
   return json({ suggestions: result.results.map((row) => row.value) });
 }
+const shopSheetHeaders = ["Transaction ID", "Date", "Entered By", "Method", "Customer / Supplier", "Product", "Quantity", "Unit Price", "Amount", "Note"];
+async function ensureShopSheet(env: Env, user: User) {
+  const saved = await env.DB.prepare("SELECT spreadsheetId FROM ShopGoogleSheet WHERE userId=?").bind(user.id).first<{ spreadsheetId: string }>();
+  if (saved?.spreadsheetId) return saved.spreadsheetId;
+  const token = await googleToken(env, user);
+  const created = await fetch("https://sheets.googleapis.com/v4/spreadsheets", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ properties: { title: "Shop Ledger Records" }, sheets: [{ properties: { title: "Transactions" } }] }) });
+  if (!created.ok) throw new Error("Unable to create the shop spreadsheet.");
+  const sheet = await created.json() as { spreadsheetId: string };
+  const header = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheet.spreadsheetId}/values/Transactions!A1?valueInputOption=USER_ENTERED`, { method: "PUT", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ values: [shopSheetHeaders] }) });
+  if (!header.ok) throw new Error("Unable to initialize the shop spreadsheet.");
+  await env.DB.prepare("INSERT OR REPLACE INTO ShopGoogleSheet (userId,spreadsheetId,updatedAt) VALUES (?,?,CURRENT_TIMESTAMP)").bind(user.id, sheet.spreadsheetId).run();
+  return sheet.spreadsheetId;
+}
+async function syncShopTransaction(env: Env, user: User, transactionId: string) {
+  const record = await env.DB.prepare("SELECT * FROM ShopTransaction WHERE id=? AND userId=?").bind(transactionId, user.id).first<Row>();
+  if (!record) return;
+  const spreadsheetId = await ensureShopSheet(env, user); const token = await googleToken(env, user);
+  const row = [record.id, record.dateStr, record.enteredBy, record.method, record.partyName, record.productName || "", record.quantityMilli ? Number(record.quantityMilli) / 1000 : "", record.unitPricePaisa ? Number(record.unitPricePaisa) / 100 : "", Number(record.amountPaisa) / 100, record.note || ""];
+  const written = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Transactions!A1:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ values: [row] }) });
+  if (!written.ok) throw new Error("Unable to write to the shop spreadsheet.");
+}
 async function shopOpeningBalances(request: Request, env: Env, user: User) {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
   const body = await request.json<Row>();
@@ -720,6 +741,8 @@ async function shopOpeningBalances(request: Request, env: Env, user: User) {
   if (receivable) entries.push(["opening_receivable", receivable, receivablePartyName]);
   if (payable) entries.push(["opening_payable", payable, payablePartyName]);
   await env.DB.batch(entries.map(([method, amountPaisa, party]) => env.DB.prepare("INSERT INTO ShopTransaction (id,userId,dateStr,enteredBy,enteredByKey,method,partyName,partyKey,amountPaisa,note,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)").bind(id(), user.id, dateStr, "Opening balance", shopKey("Opening balance"), method, party, shopKey(party), amountPaisa, "Opening balance")));
+  const inserted = await env.DB.prepare("SELECT id FROM ShopTransaction WHERE userId=? AND dateStr=? AND enteredBy='Opening balance' ORDER BY createdAt DESC LIMIT ?").bind(user.id, dateStr, entries.length).all<{ id: string }>();
+  for (const entry of inserted.results) try { await syncShopTransaction(env, user, entry.id); } catch {}
   return json({ success: true }, 201);
 }
 async function shopTransactions(request: Request, env: Env, user: User, transactionId?: string) {
@@ -752,6 +775,7 @@ async function shopTransactions(request: Request, env: Env, user: User, transact
     }
     const transaction = { id: id(), dateStr: String(body.dateStr), enteredBy, method, partyName, productName, quantityMilli, unitPricePaisa, amountPaisa, note: String(body.note || "").trim() || null };
     await env.DB.prepare("INSERT INTO ShopTransaction (id,userId,dateStr,enteredBy,enteredByKey,method,partyName,partyKey,productName,productKey,quantityMilli,unitPricePaisa,amountPaisa,note,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)").bind(transaction.id, user.id, transaction.dateStr, enteredBy, shopKey(enteredBy), method, partyName, shopKey(partyName), productName, productName ? shopKey(productName) : null, quantityMilli, unitPricePaisa, amountPaisa, transaction.note).run();
+    try { await syncShopTransaction(env, user, transaction.id); } catch {}
     return json({ success: true, transaction: { ...transaction, ...shopImpact(method, amountPaisa) } }, 201);
   }
   if (transactionId) {

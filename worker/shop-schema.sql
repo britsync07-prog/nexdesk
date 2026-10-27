@@ -22,3 +22,11 @@ CREATE INDEX IF NOT EXISTS ShopTransaction_user_date ON ShopTransaction(userId, 
 CREATE INDEX IF NOT EXISTS ShopTransaction_user_party ON ShopTransaction(userId, partyKey, dateStr DESC);
 CREATE INDEX IF NOT EXISTS ShopTransaction_user_method ON ShopTransaction(userId, method, dateStr DESC);
 CREATE INDEX IF NOT EXISTS ShopTransaction_user_product ON ShopTransaction(userId, productKey);
+
+CREATE TABLE IF NOT EXISTS ShopGoogleSheet (
+  userId TEXT PRIMARY KEY,
+  spreadsheetId TEXT NOT NULL,
+  createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (userId) REFERENCES User(id) ON DELETE CASCADE
+);
