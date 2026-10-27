@@ -1,6 +1,11 @@
 const CACHE_NAME = "shop-khata-cache-v1";
 const STATIC_ASSETS = [
   "/",
+  "/dashboard",
+  "/add-transaction",
+  "/transactions",
+  "/contacts",
+  "/settings",
   "/manifest.json",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
@@ -65,7 +70,7 @@ self.addEventListener("fetch", (event) => {
             return cachedResponse;
           }
           if (event.request.mode === "navigate") {
-            return caches.match("/");
+            return caches.match("/dashboard");
           }
           return new Response("Offline content not available", {
             status: 503,

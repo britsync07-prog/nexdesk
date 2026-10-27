@@ -51,8 +51,9 @@ export function ShopTransactions() {
       .then((data) => {
         setRows(data.transactions || []);
         setTotal(data.total || 0);
+        if (page === 1 && !filters.date && !filters.startDate && !filters.endDate && filters.method === "all" && !filters.party && !filters.product) localStorage.setItem("shop-khata-transactions", JSON.stringify(data));
       })
-      .catch(() => {});
+      .catch(() => { const cached = localStorage.getItem("shop-khata-transactions"); if (cached && page === 1) { const data = JSON.parse(cached); setRows(data.transactions || []); setTotal(data.total || 0); } });
   }, [filters, page]);
   useEffect(() => { let current = true; const timer = setTimeout(() => fetch(`/api/shop/suggestions?field=party&query=${encodeURIComponent(filters.party)}`).then((res) => res.json()).then((data) => { if (current) setPartySuggestions(data.suggestions || []); }).catch(() => {}), 160); return () => { current = false; clearTimeout(timer); }; }, [filters.party]);
   useEffect(() => { let current = true; const timer = setTimeout(() => fetch(`/api/shop/suggestions?field=product&query=${encodeURIComponent(filters.product)}`).then((res) => res.json()).then((data) => { if (current) setProductSuggestions(data.suggestions || []); }).catch(() => {}), 160); return () => { current = false; clearTimeout(timer); }; }, [filters.product]);

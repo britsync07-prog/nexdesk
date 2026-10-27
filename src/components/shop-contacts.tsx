@@ -18,8 +18,8 @@ export function ShopContacts() {
       () =>
         fetch(`/api/shop/contacts?query=${encodeURIComponent(query)}`)
           .then((res) => res.json())
-          .then((data) => setContacts(data.contacts || []))
-          .catch(() => {}),
+          .then((data) => { setContacts(data.contacts || []); if (!query) localStorage.setItem("shop-khata-contacts", JSON.stringify(data.contacts || [])); })
+          .catch(() => { if (!query) { const cached = localStorage.getItem("shop-khata-contacts"); if (cached) setContacts(JSON.parse(cached)); } }),
       160,
     );
     return () => clearTimeout(timer);
