@@ -62,6 +62,20 @@ For the Cloudflare API, install Wrangler and configure `worker/wrangler.jsonc` w
 
 Never commit OAuth secrets, session secrets, refresh tokens, or a local D1/SQLite database.
 
+## Problems we solved
+
+| Problem | Fix |
+| --- | --- |
+| Large history pages became slow | History is paginated in D1; filters run before pagination so they cover the full record set. |
+| Google Sheets was too slow for live reads | D1 became the source of truth; Sheets receives background synced copies. |
+| A missing spreadsheet blocked sync | The Worker finds or creates the user's `ShiftLog Records` spreadsheet and `Records` tab. |
+| Suggestions showed data from another account | Every suggestion query is scoped to the signed-in user. |
+| Sessions ended too often | The HTTP-only session cookie has an explicit 90-day lifetime. |
+| Browser deletion prompts did not match the app | History deletion now uses an in-app confirmation dialog. |
+| OAuth login failed during setup | The deployment guide documents the exact Pages origin and callback URL. |
+
+Read the complete [decisions and fixes log](docs/DECISIONS_AND_FIXES.md) for causes, constraints, and operational notes.
+
 ## Development commands
 
 ```powershell
