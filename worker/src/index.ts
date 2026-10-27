@@ -106,7 +106,7 @@ const employeeUsername = (value: unknown) => String(value || "").trim().replace(
 const employeeKey = (value: string) => value.toLocaleLowerCase();
 async function employeePasswordHash(password: string, salt: string) {
   const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
-  return b64(new Uint8Array(await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: bytes(salt), iterations: 120000 }, key, 256)));
+  return b64(new Uint8Array(await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: bytes(salt), iterations: 100000 }, key, 256)));
 }
 async function employeeLogin(request: Request, env: Env) {
   const body = await request.json<Row>(); const username = employeeUsername(body.username); const password = String(body.password || "");
