@@ -1,9 +1,10 @@
 "use client";
 import { ShopOpeningBalances } from "@/components/shop-opening-balances";
+import { ShopSheetLink } from "@/components/shop-sheet-link";
 import { useShopLanguage } from "@/components/shop-language";
 import { copy } from "@/lib/shop";
 
 export default function SettingsPage() {
   const { language, setLanguage } = useShopLanguage(); const t = copy(language);
-  return <main className="mx-auto max-w-4xl p-5 md:p-8"><h1 className="text-2xl font-semibold">{t.settings}</h1><section className="mt-6 grid gap-5 rounded-lg border border-[#e6e6e6] bg-white p-5 sm:grid-cols-[1fr_auto]"><div><h2 className="font-medium">{language === "bn" ? "ভাষা" : "Language"}</h2><p className="mt-1 text-sm text-[#6b6b6b]">{language === "bn" ? "সম্পূর্ণ বাংলা বা ইংরেজি সংস্করণ বেছে নিন।" : "Choose the complete Bangla or English version."}</p></div><button onClick={() => setLanguage(language === "en" ? "bn" : "en")} className="h-10 rounded-md border border-[#d4d4d4] px-4 text-sm">{t.language}</button></section><ShopOpeningBalances /></main>;
+  return <main className="mx-auto max-w-4xl p-5 md:p-8"><h1 className="text-2xl font-semibold">{t.settings}</h1><section className="mt-6 grid gap-5 rounded-lg border border-[#e6e6e6] bg-white p-5 sm:grid-cols-[1fr_auto]"><div><h2 className="font-medium">{language === "bn" ? "ভাষা" : "Language"}</h2><p className="mt-1 text-sm text-[#6b6b6b]">{language === "bn" ? "সম্পূর্ণ বাংলা বা ইংরেজি সংস্করণ বেছে নিন।" : "Choose the complete Bangla or English version."}</p></div><button onClick={() => setLanguage(language === "en" ? "bn" : "en")} className="h-10 rounded-md border border-[#d4d4d4] px-4 text-sm">{t.language}</button></section><ShopSheetLink /><ShopOpeningBalances /></main>;
 }

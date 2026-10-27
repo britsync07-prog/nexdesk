@@ -726,6 +726,11 @@ async function syncShopTransaction(env: Env, user: User, transactionId: string) 
   const written = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Transactions!A1:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ values: [row] }) });
   if (!written.ok) throw new Error("Unable to write to the shop spreadsheet.");
 }
+async function shopSheet(request: Request, env: Env, user: User) {
+  let spreadsheetId = (await env.DB.prepare("SELECT spreadsheetId FROM ShopGoogleSheet WHERE userId=?").bind(user.id).first<{ spreadsheetId: string }>())?.spreadsheetId;
+  if (request.method === "POST" && !spreadsheetId) spreadsheetId = await ensureShopSheet(env, user);
+  return json({ spreadsheetId: spreadsheetId || null, webViewLink: spreadsheetId ? `https://docs.google.com/spreadsheets/d/${spreadsheetId}` : null });
+}
 async function shopOpeningBalances(request: Request, env: Env, user: User) {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
   const body = await request.json<Row>();
@@ -1289,6 +1294,7 @@ export default {
     const shopTransaction = url.pathname.match(/^\/api\/shop\/transactions(?:\/([^/]+))?$/);
     const shopContact = url.pathname.match(/^\/api\/shop\/contacts(?:\/([^/]+))?$/);
     if (url.pathname === "/api/shop/suggestions") return shopSuggestions(request, env, user);
+    if (url.pathname === "/api/shop/sheet") return shopSheet(request, env, user);
     if (url.pathname === "/api/shop/opening-balances") return shopOpeningBalances(request, env, user);
     if (shopTransaction) return shopTransactions(request, env, user, shopTransaction[1]);
     if (shopContact && request.method === "GET") return shopContacts(request, env, user, shopContact[1]);
