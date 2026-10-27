@@ -54,8 +54,8 @@ export function ShopTransactions() {
       })
       .catch(() => {});
   }, [filters, page]);
-  useEffect(() => { const timer = setTimeout(() => fetch(`/api/shop/suggestions?field=party&query=${encodeURIComponent(filters.party)}`).then((res) => res.json()).then((data) => setPartySuggestions(data.suggestions || []) ).catch(() => {}), 160); return () => clearTimeout(timer); }, [filters.party]);
-  useEffect(() => { const timer = setTimeout(() => fetch(`/api/shop/suggestions?field=product&query=${encodeURIComponent(filters.product)}`).then((res) => res.json()).then((data) => setProductSuggestions(data.suggestions || []) ).catch(() => {}), 160); return () => clearTimeout(timer); }, [filters.product]);
+  useEffect(() => { let current = true; const timer = setTimeout(() => fetch(`/api/shop/suggestions?field=party&query=${encodeURIComponent(filters.party)}`).then((res) => res.json()).then((data) => { if (current) setPartySuggestions(data.suggestions || []); }).catch(() => {}), 160); return () => { current = false; clearTimeout(timer); }; }, [filters.party]);
+  useEffect(() => { let current = true; const timer = setTimeout(() => fetch(`/api/shop/suggestions?field=product&query=${encodeURIComponent(filters.product)}`).then((res) => res.json()).then((data) => { if (current) setProductSuggestions(data.suggestions || []); }).catch(() => {}), 160); return () => { current = false; clearTimeout(timer); }; }, [filters.product]);
   const update = (key: keyof typeof filters, value: string) => {
     setPage(1);
     setFilters((current) => ({ ...current, [key]: value }));
