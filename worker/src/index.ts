@@ -291,7 +291,7 @@ async function oauthCallback(request: Request, env: Env) {
   return new Response(null, {
     status: 302,
     headers: {
-      location: `${origin(env)}/dashboard?google_connected=true`,
+      location: `${origin(env, request)}/dashboard?google_connected=true`,
       "set-cookie": await sessionCookie(user.id, env),
     },
   });
