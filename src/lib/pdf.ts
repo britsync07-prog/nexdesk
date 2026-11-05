@@ -79,56 +79,41 @@ export function generateShiftLogPDF(
   doc.text(criteriaText, 14, 24);
 
   // --- Table Headers & Data Assembly ---
-  const tableHeaders = [
-    "#",
-    "Date",
-    "Shift",
-    "Supervisor",
-    "Factory",
-    "Location",
-    "Shift Headcount",
-    filterSummary.personName ? "Employee" : "Personnel Names",
-    ...(filterSummary.personName ? ["Attendance / Personal Note"] : []),
-    ...customColumns.map((col) => col.name),
-    "Remarks",
-  ];
-
   const tableData = records.map((record, index) => {
-    const customCells = customColumns.map((col) => {
+    const customDetails = customColumns.flatMap((col) => {
       const val = record.customValues?.[col.key];
-      return val !== undefined && val !== null ? String(val) : "";
+      return val ? [`${col.name}: ${val}`] : [];
     });
-
     const formattedNames =
       record.personNames && record.personNames.length > 0
         ? record.personNames.filter(Boolean).join(", ")
         : "-";
-
     return [
       String(index + 1),
-      record.dateStr,
-      record.shift,
-      record.supervisedBy,
-      record.factoryName,
-      record.location,
-      String(record.personsCount),
-      formattedNames,
-      ...(filterSummary.personName ? [record.employeeNote || "-"] : []),
-      ...customCells,
-      record.remarks || "-",
+      `${record.dateStr}\n${record.shift} shift`,
+      [
+        `Supervisor: ${record.supervisedBy}`,
+        `Factory: ${record.factoryName}`,
+        `Location: ${record.location}`,
+        `Shift headcount: ${record.personsCount}`,
+        `${filterSummary.personName ? "Employee" : "Personnel names"}: ${formattedNames}`,
+        ...(filterSummary.personName ? [`Attendance / personal note: ${record.employeeNote || "-"}`] : []),
+        ...customDetails,
+        `Remarks: ${record.remarks || "-"}`,
+      ].join("\n"),
     ];
   });
 
   // --- AutoTable Layout ---
   autoTable(doc, {
     startY: 30,
-    head: [tableHeaders],
+    head: [["#", "Date / Shift", "Full record details"]],
     body: tableData,
     theme: "grid",
     styles: {
       fontSize: 7,
       cellPadding: 1.5,
-      overflow: "ellipsize",
+      overflow: "linebreak",
       textColor: [0, 0, 0],
       lineColor: [0, 0, 0],
       lineWidth: 0.15,
@@ -138,18 +123,12 @@ export function generateShiftLogPDF(
       textColor: [0, 0, 0],
       fontStyle: "bold",
       halign: "left",
-      overflow: "ellipsize",
+      overflow: "linebreak",
     },
     columnStyles: {
       0: { cellWidth: 8, halign: "center" },
-      1: { cellWidth: 20 },
-      2: { cellWidth: 15 },
-      3: { cellWidth: 26 },
-      4: { cellWidth: 24 },
-      5: { cellWidth: 20 },
-      6: { cellWidth: 22, halign: "center" },
-      7: { cellWidth: filterSummary.personName ? 28 : 45 },
-      ...(filterSummary.personName ? { 8: { cellWidth: 34 } } : {}),
+      1: { cellWidth: 27 },
+      2: { cellWidth: 220 },
     },
     margin: { left: 14, right: 14, bottom: 18 },
     didDrawPage: () => {
