@@ -81,7 +81,7 @@ export default function HistoryPage() {
       .then((data) => {
         if (data.columns) {
           setCustomColumns(
-            data.columns.map((c: { key: string; name: string }) => ({
+            data.columns.filter((c: { key: string }) => c.key !== "employee_list").map((c: { key: string; name: string }) => ({
               key: c.key,
               name: c.name,
             }))
@@ -117,18 +117,25 @@ export default function HistoryPage() {
   const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   // Convert RecordItem to PDFExportRecord
-  const pdfRecords = records.map((r) => ({
-    id: r.id,
-    dateStr: r.dateStr,
-    shift: r.shift,
-    supervisedBy: r.supervisedBy,
-    factoryName: r.factoryName,
-    location: r.location,
-    personsCount: r.personsCount,
-    personNames: r.persons?.map((p) => p.name) || [],
-    remarks: r.remarks,
-    customValues: r.customValues ? JSON.parse(r.customValues) : {},
-  }));
+  const pdfRecords = records.flatMap((r) => {
+    let customValues: Record<string, string> = {};
+    try { customValues = r.customValues ? JSON.parse(r.customValues) : {}; } catch { /* ignore malformed historic data */ }
+    const notes = Array.isArray(customValues.__personNotes) ? customValues.__personNotes as string[] : [];
+    delete customValues.__personNotes;
+    if (!filters.personName) return [{
+      id: r.id, dateStr: r.dateStr, shift: r.shift, supervisedBy: r.supervisedBy,
+      factoryName: r.factoryName, location: r.location, personsCount: r.personsCount,
+      personNames: r.persons?.map((p) => p.name) || [], remarks: r.remarks, customValues,
+    }];
+    return (r.persons || [])
+      .filter((person) => person.name.toLowerCase().includes(filters.personName.toLowerCase()))
+      .map((person) => ({
+        id: r.id, dateStr: r.dateStr, shift: r.shift, supervisedBy: r.supervisedBy,
+        factoryName: r.factoryName, location: r.location, personsCount: r.personsCount,
+        personNames: [person.name], employeeNote: notes[person.personIndex - 1] || "",
+        remarks: r.remarks, customValues,
+      }));
+  });
 
   return (
     <div className="nex-app min-h-screen bg-[#e4eae6] p-2 md:pl-[236px]">

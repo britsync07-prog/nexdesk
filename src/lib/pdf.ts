@@ -10,6 +10,7 @@ export interface PDFExportRecord {
   location: string;
   personsCount: number;
   personNames: string[];
+  employeeNote?: string;
   remarks?: string | null;
   customValues?: Record<string, string>;
 }
@@ -85,8 +86,9 @@ export function generateShiftLogPDF(
     "Supervisor",
     "Factory",
     "Location",
-    "Headcount",
-    "Personnel Names",
+    "Shift Headcount",
+    filterSummary.personName ? "Employee" : "Personnel Names",
+    ...(filterSummary.personName ? ["Attendance / Personal Note"] : []),
     ...customColumns.map((col) => col.name),
     "Remarks",
   ];
@@ -111,6 +113,7 @@ export function generateShiftLogPDF(
       record.location,
       String(record.personsCount),
       formattedNames,
+      ...(filterSummary.personName ? [record.employeeNote || "-"] : []),
       ...customCells,
       record.remarks || "-",
     ];
@@ -145,7 +148,8 @@ export function generateShiftLogPDF(
       4: { cellWidth: 24 },
       5: { cellWidth: 20 },
       6: { cellWidth: 22, halign: "center" },
-      7: { cellWidth: 45 },
+      7: { cellWidth: filterSummary.personName ? 28 : 45 },
+      ...(filterSummary.personName ? { 8: { cellWidth: 34 } } : {}),
     },
     margin: { left: 14, right: 14, bottom: 18 },
     didDrawPage: () => {
