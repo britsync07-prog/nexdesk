@@ -570,6 +570,14 @@ async function records(
       .run();
     return json({ success: true });
   }
+  if (recordId) {
+    const ownedRecord = await env.DB.prepare(
+      "SELECT id FROM ShiftRecord WHERE id=? AND userId=?",
+    )
+      .bind(recordId, user.id)
+      .first();
+    if (!ownedRecord) return json({ error: "Record not found" }, 404);
+  }
   const body = await request.json<Row>();
   if (
     !validDate(body.dateStr) ||
