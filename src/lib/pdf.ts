@@ -80,9 +80,9 @@ export function generateShiftLogPDF(
 
   // --- Table Headers & Data Assembly ---
   const tableData = records.map((record, index) => {
-    const customDetails = customColumns.flatMap((col) => {
+    const customCells = customColumns.map((col) => {
       const val = record.customValues?.[col.key];
-      return val ? [`${col.name}: ${val}`] : [];
+      return val !== undefined && val !== null ? String(val) : "";
     });
     const formattedNames =
       record.personNames && record.personNames.length > 0
@@ -90,24 +90,28 @@ export function generateShiftLogPDF(
         : "-";
     return [
       String(index + 1),
-      `${record.dateStr}\n${record.shift} shift`,
-      [
-        `Supervisor: ${record.supervisedBy}`,
-        `Factory: ${record.factoryName}`,
-        `Location: ${record.location}`,
-        `Shift headcount: ${record.personsCount}`,
-        `${filterSummary.personName ? "Employee" : "Personnel names"}: ${formattedNames}`,
-        ...(filterSummary.personName ? [`Attendance / personal note: ${record.employeeNote || "-"}`] : []),
-        ...customDetails,
-        `Remarks: ${record.remarks || "-"}`,
-      ].join("\n"),
+      record.dateStr,
+      record.shift,
+      record.supervisedBy,
+      record.factoryName,
+      record.location,
+      String(record.personsCount),
+      formattedNames,
+      ...(filterSummary.personName ? [record.employeeNote || "-"] : []),
+      ...customCells,
+      record.remarks || "-",
     ];
   });
 
   // --- AutoTable Layout ---
   autoTable(doc, {
     startY: 30,
-    head: [["#", "Date / Shift", "Full record details"]],
+    head: [[
+      "#", "Date", "Shift", "Supervisor", "Factory", "Location", "Shift Headcount",
+      filterSummary.personName ? "Employee" : "Personnel Names",
+      ...(filterSummary.personName ? ["Attendance / Personal Note"] : []),
+      ...customColumns.map((col) => col.name), "Remarks",
+    ]],
     body: tableData,
     theme: "grid",
     styles: {
@@ -127,8 +131,14 @@ export function generateShiftLogPDF(
     },
     columnStyles: {
       0: { cellWidth: 8, halign: "center" },
-      1: { cellWidth: 27 },
-      2: { cellWidth: 220 },
+      1: { cellWidth: 20 },
+      2: { cellWidth: 15 },
+      3: { cellWidth: 25 },
+      4: { cellWidth: 25 },
+      5: { cellWidth: 22 },
+      6: { cellWidth: 18, halign: "center" },
+      7: { cellWidth: filterSummary.personName ? 26 : 46 },
+      ...(filterSummary.personName ? { 8: { cellWidth: 32 } } : {}),
     },
     margin: { left: 14, right: 14, bottom: 18 },
     didDrawPage: () => {
