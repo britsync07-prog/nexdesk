@@ -66,7 +66,8 @@ export default function SettingsPage() {
   const [newColOptions, setNewColOptions] = useState("");
   const [newColRequired, setNewColRequired] = useState(false);
   const [isAddingColumn, setIsAddingColumn] = useState(false);
-  const [employeeList, setEmployeeList] = useState("");
+  const [employees, setEmployees] = useState<string[]>([]);
+  const [employeeName, setEmployeeName] = useState("");
   const [isSavingEmployees, setIsSavingEmployees] = useState(false);
 
   const loadSettingsData = useCallback(async () => {
@@ -98,7 +99,7 @@ export default function SettingsPage() {
         const columns = cData.columns || [];
         const employeeColumn = columns.find((column: CustomColumnItem) => column.key === "employee_list");
         if (employeeColumn?.options) {
-          try { setEmployeeList(JSON.parse(employeeColumn.options).join(", ")); } catch { setEmployeeList(""); }
+          try { setEmployees(JSON.parse(employeeColumn.options)); } catch { setEmployees([]); }
         }
         setCustomColumns(columns.filter((column: CustomColumnItem) => column.key !== "employee_list"));
       }
@@ -207,7 +208,7 @@ export default function SettingsPage() {
       const res = await fetch("/api/custom-columns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "Employee List", type: "SELECT", options: employeeList, required: false }),
+        body: JSON.stringify({ name: "Employee List", type: "SELECT", options: employees, required: false }),
       });
       const data = await res.json();
       setMessage(res.ok ? { type: "success", text: "Employee dropdown saved." } : { type: "error", text: data.error || "Failed to save employees" });
@@ -217,6 +218,13 @@ export default function SettingsPage() {
     } finally {
       setIsSavingEmployees(false);
     }
+  };
+
+  const addEmployee = () => {
+    const name = employeeName.trim();
+    if (!name || employees.some((employee) => employee.toLowerCase() === name.toLowerCase())) return;
+    setEmployees((current) => [...current, name]);
+    setEmployeeName("");
   };
 
   const handleDeleteColumn = async (col: CustomColumnItem) => {
@@ -401,17 +409,33 @@ export default function SettingsPage() {
             <User className="w-4 h-4" />
             <span>Employee Dropdown</span>
           </div>
-          <p className="text-xs text-zinc-400">Add employee names once. Same-date assignments become unavailable automatically.</p>
-          <form onSubmit={handleSaveEmployees} className="flex flex-col gap-2 sm:flex-row">
+          <p className="text-xs text-zinc-400">Add each employee. Same-date assignments become unavailable automatically.</p>
+          <form onSubmit={handleSaveEmployees} className="space-y-3">
+            <div className="flex flex-col gap-2 sm:flex-row">
             <input
               type="text"
-              value={employeeList}
-              onChange={(e) => setEmployeeList(e.target.value)}
-              placeholder="Rahim, Karim, Fatima"
+              value={employeeName}
+              onChange={(e) => setEmployeeName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addEmployee(); } }}
+              placeholder="Employee name"
               className="min-w-0 flex-1 bg-[#18181b] border border-zinc-700 rounded-xl px-3 py-2 text-xs text-zinc-100"
             />
+            <button type="button" onClick={addEmployee} disabled={!employeeName.trim()} className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-xs disabled:opacity-50">
+              Add Worker
+            </button>
+            </div>
+            {employees.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {employees.map((employee) => (
+                  <span key={employee} className="inline-flex items-center gap-1 rounded-lg bg-zinc-800 px-2 py-1 text-xs text-zinc-200">
+                    {employee}
+                    <button type="button" onClick={() => setEmployees((current) => current.filter((item) => item !== employee))} aria-label={`Remove ${employee}`} className="text-zinc-500 hover:text-red-400">×</button>
+                  </span>
+                ))}
+              </div>
+            )}
             <button type="submit" disabled={isSavingEmployees} className="px-3 py-2 rounded-xl bg-cyan-700 hover:bg-cyan-600 text-white font-semibold text-xs disabled:opacity-50">
-              {isSavingEmployees ? "Saving..." : "Save Employees"}
+              {isSavingEmployees ? "Saving..." : `Save ${employees.length} Workers`}
             </button>
           </form>
         </div>
