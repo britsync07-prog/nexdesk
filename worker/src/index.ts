@@ -453,6 +453,14 @@ async function listRecords(request: Request, env: Env, user: User) {
       `SELECT * FROM ShiftRecord${where} ORDER BY dateStr DESC,createdAt DESC LIMIT ? OFFSET ?`,
     ).bind(...params, limit, offset),
   ]);
+  const dutyWhere = where
+    .replace(" WHERE userId=?", " WHERE sr.userId=?")
+    .replace(" AND id IN (", " AND sr.id IN (");
+  const dutyDays = await env.DB.prepare(
+    `SELECT rp.name, COUNT(DISTINCT sr.dateStr) dutyDays FROM RecordPerson rp INNER JOIN ShiftRecord sr ON sr.id=rp.recordId${dutyWhere} GROUP BY rp.name ORDER BY dutyDays DESC,rp.name ASC`,
+  )
+    .bind(...params)
+    .all<{ name: string; dutyDays: number }>();
   const records = recordResult.results as Row[];
   const recordIds = records.map((record) => String(record.id));
   const people = recordIds.length
@@ -478,6 +486,10 @@ async function listRecords(request: Request, env: Env, user: User) {
       nightShifts: Number(summary.nightShifts || 0),
       personnel: Number(summary.personnel || 0),
     },
+    dutyDays: dutyDays.results.map((entry) => ({
+      name: entry.name,
+      dutyDays: Number(entry.dutyDays),
+    })),
     records: records.map((record) => ({
       ...record,
       persons: byRecord.get(String(record.id)) || [],
@@ -581,6 +593,17 @@ async function records(
         .map((x) => x.trim())
         .filter(Boolean)
     : [];
+  if (names.length !== count || new Set(names).size !== names.length)
+    return json({ error: "Select each worker once." }, 400);
+  const assigned = await env.DB.batch(
+    names.map((name) =>
+      env.DB.prepare(
+        "SELECT rp.name FROM RecordPerson rp INNER JOIN ShiftRecord sr ON sr.id=rp.recordId WHERE sr.userId=? AND sr.dateStr=? AND rp.name=? AND sr.id<>? LIMIT 1",
+      ).bind(user.id, String(body.dateStr), name, recordId || ""),
+    ),
+  );
+  if (assigned.some((result) => result.results.length))
+    return json({ error: "A selected worker is already assigned on this date." }, 409);
   const values = [
     String(body.dateStr),
     `${body.dateStr}T00:00:00.000Z`,

@@ -19,6 +19,7 @@ export default function HistoryPage() {
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [customColumns, setCustomColumns] = useState<PDFCustomColumnDef[]>([]);
+  const [dutyDays, setDutyDays] = useState<{ name: string; dutyDays: number }[]>([]);
 
   const [filters, setFilters] = useState<FilterState>({
     date: "",
@@ -51,6 +52,7 @@ export default function HistoryPage() {
         const data = await res.json();
         setRecords(data.records || []);
         setTotalCount(data.total || 0);
+        setDutyDays(data.dutyDays || []);
       }
     } catch {
       // ignore
@@ -180,6 +182,23 @@ export default function HistoryPage() {
             resultCount={totalCount}
           />
         </div>
+
+        <section className="rounded-2xl border border-zinc-800 bg-[#121215] p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-white">Duty days by employee</h2>
+            <span className="text-[10px] text-zinc-500">Matches active filters</span>
+          </div>
+          {dutyDays.length ? (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+              {dutyDays.map((employee) => (
+                <div key={employee.name} className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2">
+                  <p className="truncate text-xs text-zinc-300">{employee.name}</p>
+                  <p className="mt-1 text-lg font-semibold text-cyan-400">{employee.dutyDays} <span className="text-[10px] font-normal text-zinc-500">days</span></p>
+                </div>
+              ))}
+            </div>
+          ) : <p className="text-xs text-zinc-500">No duty days match current filters.</p>}
+        </section>
 
         {/* Records List Feed */}
         {isLoading ? (

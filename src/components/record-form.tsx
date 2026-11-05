@@ -69,6 +69,8 @@ export function RecordForm({ initialRecord, onSuccess }: RecordFormProps) {
 
   // Custom Columns & Values
   const [customColumns, setCustomColumns] = useState<CustomColumnDef[]>([]);
+  const [employeeOptions, setEmployeeOptions] = useState<string[]>([]);
+  const [unavailableEmployees, setUnavailableEmployees] = useState<Set<string>>(new Set());
   const [customValues, setCustomValues] = useState<Record<string, string>>(() => {
     if (initialRecord?.customValues) {
       try {
@@ -86,16 +88,33 @@ export function RecordForm({ initialRecord, onSuccess }: RecordFormProps) {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Load custom columns for this user
+  useEffect(() => { fetchCustomColumns(); }, []);
+
   useEffect(() => {
-    fetchCustomColumns();
-  }, []);
+    if (!dateStr) return;
+    fetch(`/api/records?date=${encodeURIComponent(dateStr)}&limit=200`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        const names = (data?.records || [])
+          .filter((record: { id: string }) => record.id !== initialRecord?.id)
+          .flatMap((record: { persons?: { name: string }[] }) => record.persons || [])
+          .map((person: { name: string }) => person.name);
+        setUnavailableEmployees(new Set(names));
+      })
+      .catch(() => setUnavailableEmployees(new Set()));
+  }, [dateStr, initialRecord?.id]);
 
   async function fetchCustomColumns() {
     try {
       const res = await fetch("/api/custom-columns");
       if (res.ok) {
         const data = await res.json();
-        setCustomColumns(data.columns || []);
+        const columns = data.columns || [];
+        setCustomColumns(columns.filter((column: CustomColumnDef) => column.key !== "employee_list"));
+        const employeeColumn = columns.find((column: CustomColumnDef) => column.key === "employee_list");
+        if (employeeColumn?.options) {
+          try { setEmployeeOptions(JSON.parse(employeeColumn.options)); } catch { setEmployeeOptions([]); }
+        }
       }
     } catch {
       // ignore
@@ -115,6 +134,10 @@ export function RecordForm({ initialRecord, onSuccess }: RecordFormProps) {
     return next;
   });
 
+  const selectedElsewhere = (index: number) => new Set(
+    personNames.filter((name, currentIndex) => currentIndex !== index && name),
+  );
+
   const handleCustomValueChange = (key: string, val: string) => {
     setCustomValues((prev) => ({ ...prev, [key]: val }));
   };
@@ -127,6 +150,10 @@ export function RecordForm({ initialRecord, onSuccess }: RecordFormProps) {
     // Basic validation
     if (!dateStr || !supervisedBy.trim() || !factoryName.trim() || !location.trim()) {
       setErrorMessage("Please fill in all required fields (Date, Supervisor, Factory, Location).");
+      return;
+    }
+    if (personNames.slice(0, personsCount).some((name) => !name.trim())) {
+      setErrorMessage("Select a worker for every personnel slot.");
       return;
     }
 
@@ -304,12 +331,28 @@ export function RecordForm({ initialRecord, onSuccess }: RecordFormProps) {
                   {i + 1}.
                 </span>
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <AutocompleteInput
-                    field="personName"
-                    value={personNames[i] || ""}
-                    onChange={(val) => handlePersonNameChange(i, val)}
-                    placeholder={`Worker ${i + 1} Name`}
-                    className="py-2"
+                  {employeeOptions.length ? (
+                    <select
+                      value={personNames[i] || ""}
+                      onChange={(e) => handlePersonNameChange(i, e.target.value)}
+                      className="w-full rounded-md border border-[#cdced1] bg-white px-3 py-2 text-sm text-[#131416]"
+                    >
+                      <option value="">Select worker</option>
+                      {employeeOptions.map((employee) => (
+                        <option key={employee} value={employee} disabled={unavailableEmployees.has(employee) || selectedElsewhere(i).has(employee)}>
+                          {employee}{unavailableEmployees.has(employee) ? " (already assigned today)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <AutocompleteInput field="personName" value={personNames[i] || ""} onChange={(val) => handlePersonNameChange(i, val)} placeholder={`Worker ${i + 1} Name`} className="py-2" />
+                  )}
+                  <input
+                    type="text"
+                    value={personNotes[i] || ""}
+                    onChange={(e) => handlePersonNoteChange(i, e.target.value)}
+                    placeholder="Hajira / personal note"
+                    className="w-full rounded-md border border-[#cdced1] bg-white px-3 py-2 text-sm text-[#131416]"
                   />
                 </div>
               </div>

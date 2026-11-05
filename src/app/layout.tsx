@@ -1,9 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import { Hanken_Grotesk } from "next/font/google";
 import "./globals.css";
 import { Navigation } from "@/components/navigation";
 
-const hanken = Hanken_Grotesk({ subsets: ["latin"], variable: "--font-hanken" });
 
 export const metadata: Metadata = {
   title: "NexDesk - Factory Shift Records",
@@ -40,7 +38,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
         <script dangerouslySetInnerHTML={{ __html: "try { if (localStorage.getItem('nexdesk-theme') === 'dark') document.documentElement.classList.add('theme-dark'); } catch {}" }} />
       </head>
-      <body className={`${hanken.variable} min-h-screen bg-[#e4eae6] text-[#131416] antialiased selection:bg-[#1b6c80] selection:text-white flex flex-col`}>
+      <body className="min-h-screen bg-[#e4eae6] text-[#131416] antialiased selection:bg-[#1b6c80] selection:text-white flex flex-col">
         <Navigation />
         <main className="flex-1 pb-20 md:pb-8">{children}</main>
 

@@ -66,6 +66,8 @@ export default function SettingsPage() {
   const [newColOptions, setNewColOptions] = useState("");
   const [newColRequired, setNewColRequired] = useState(false);
   const [isAddingColumn, setIsAddingColumn] = useState(false);
+  const [employeeList, setEmployeeList] = useState("");
+  const [isSavingEmployees, setIsSavingEmployees] = useState(false);
 
   const loadSettingsData = useCallback(async () => {
     setIsLoading(true);
@@ -93,7 +95,12 @@ export default function SettingsPage() {
       }
       if (colsRes.ok) {
         const cData = await colsRes.json();
-        setCustomColumns(cData.columns || []);
+        const columns = cData.columns || [];
+        const employeeColumn = columns.find((column: CustomColumnItem) => column.key === "employee_list");
+        if (employeeColumn?.options) {
+          try { setEmployeeList(JSON.parse(employeeColumn.options).join(", ")); } catch { setEmployeeList(""); }
+        }
+        setCustomColumns(columns.filter((column: CustomColumnItem) => column.key !== "employee_list"));
       }
     } catch {
       // ignore
@@ -189,6 +196,26 @@ export default function SettingsPage() {
       setMessage({ type: "error", text: "Error creating column" });
     } finally {
       setIsAddingColumn(false);
+    }
+  };
+
+  const handleSaveEmployees = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingEmployees(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/custom-columns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Employee List", type: "SELECT", options: employeeList, required: false }),
+      });
+      const data = await res.json();
+      setMessage(res.ok ? { type: "success", text: "Employee dropdown saved." } : { type: "error", text: data.error || "Failed to save employees" });
+      if (res.ok) await loadSettingsData();
+    } catch {
+      setMessage({ type: "error", text: "Failed to save employees" });
+    } finally {
+      setIsSavingEmployees(false);
     }
   };
 
@@ -368,7 +395,28 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* 3. Manage Custom Columns */}
+        {/* 3. Employee dropdown */}
+        <div className="p-5 rounded-3xl bg-[#121215] border border-zinc-800 shadow-md space-y-3">
+          <div className="flex items-center gap-2 text-xs font-mono uppercase text-cyan-400">
+            <User className="w-4 h-4" />
+            <span>Employee Dropdown</span>
+          </div>
+          <p className="text-xs text-zinc-400">Add employee names once. Same-date assignments become unavailable automatically.</p>
+          <form onSubmit={handleSaveEmployees} className="flex flex-col gap-2 sm:flex-row">
+            <input
+              type="text"
+              value={employeeList}
+              onChange={(e) => setEmployeeList(e.target.value)}
+              placeholder="Rahim, Karim, Fatima"
+              className="min-w-0 flex-1 bg-[#18181b] border border-zinc-700 rounded-xl px-3 py-2 text-xs text-zinc-100"
+            />
+            <button type="submit" disabled={isSavingEmployees} className="px-3 py-2 rounded-xl bg-cyan-700 hover:bg-cyan-600 text-white font-semibold text-xs disabled:opacity-50">
+              {isSavingEmployees ? "Saving..." : "Save Employees"}
+            </button>
+          </form>
+        </div>
+
+        {/* 4. Manage Custom Columns */}
         <div className="p-5 rounded-3xl bg-[#121215] border border-zinc-800 shadow-md space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
             <div className="flex items-center gap-2 text-xs font-mono uppercase text-purple-400">
