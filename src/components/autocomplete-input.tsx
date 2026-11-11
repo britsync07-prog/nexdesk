@@ -6,7 +6,7 @@ import { Sparkles, Loader2 } from "lucide-react";
 interface AutocompleteInputProps {
   id?: string;
   name?: string;
-  field: "supervisedBy" | "factoryName" | "location" | "personName";
+  field: "factoryName" | "location" | "personName";
   value: string;
   onChange: (val: string) => void;
   placeholder?: string;

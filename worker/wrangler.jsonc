@@ -1,6 +1,7 @@
 {
   "$schema": "../node_modules/wrangler/config-schema.json",
   "name": "nexdesk-api",
+  "account_id": "9ed8303661b0e2f450816251445f4a60",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-27",
   "d1_databases": [

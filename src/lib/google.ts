@@ -19,8 +19,6 @@ export const REQUIRED_SCOPES = [
 export const STANDARD_HEADERS = [
   "Record ID",
   "Date",
-  "Shift",
-  "Supervised By",
   "Factory Name",
   "Location",
   "Persons",
@@ -237,13 +235,11 @@ export async function syncRecordToSheet(userId: string, recordId: string) {
     const rowData: Record<string, string | number> = {
       "Record ID": record.id,
       "Date": record.dateStr,
-      "Shift": record.shift,
-      "Supervised By": record.supervisedBy,
       "Factory Name": record.factoryName,
       "Location": record.location,
       "Persons": record.personsCount,
       "Person Names": personNamesStr,
-      "Remarks": record.remarks || "",
+      Remarks: record.remarks || "",
     };
 
     // Add custom fields
@@ -362,8 +358,6 @@ export async function importFromSheet(userId: string) {
 
   const idCol = headerMap["record id"];
   const dateCol = headerMap["date"];
-  const shiftCol = headerMap["shift"];
-  const supCol = headerMap["supervised by"];
   const factoryCol = headerMap["factory name"];
   const locCol = headerMap["location"];
   const personsCol = headerMap["persons"];
@@ -382,13 +376,11 @@ export async function importFromSheet(userId: string) {
 
     const rowRecordId = idCol !== undefined ? String(row[idCol] || "").trim() : "";
     const rowDateStr = dateCol !== undefined ? String(row[dateCol] || "").trim() : "";
-    const rowShift = shiftCol !== undefined ? String(row[shiftCol] || "").trim() : "Day";
-    const rowSupervisor = supCol !== undefined ? String(row[supCol] || "").trim() : "Supervisor";
     const rowFactory = factoryCol !== undefined ? String(row[factoryCol] || "").trim() : "Factory 1";
     const rowLocation = locCol !== undefined ? String(row[locCol] || "").trim() : "Floor";
     const rowPersonsCount = personsCol !== undefined ? parseInt(String(row[personsCol]), 10) || 1 : 1;
     const rowNamesStr = namesCol !== undefined ? String(row[namesCol] || "").trim() : "";
-    const rowRemarks = remarksCol !== undefined ? String(row[remarksCol] || "").trim() : "";
+    const rowRemarks = remarksCol !== undefined ? String(row[remarksCol] || "").trim() : null;
     const customValues = Object.fromEntries(
       customColumns.flatMap((column) => {
         const columnIndex = headerMap[column.name.toLowerCase()];
@@ -412,9 +404,7 @@ export async function importFromSheet(userId: string) {
         where: {
           userId,
           dateStr: rowDateStr,
-          shift: rowShift,
           factoryName: rowFactory,
-          supervisedBy: rowSupervisor,
         },
       });
     }
@@ -436,12 +426,10 @@ export async function importFromSheet(userId: string) {
         userId,
         dateStr: rowDateStr,
         date: validDate,
-        shift: rowShift.toLowerCase().includes("night") ? "Night" : "Day",
-        supervisedBy: rowSupervisor,
         factoryName: rowFactory,
         location: rowLocation,
         personsCount: Math.min(Math.max(rowPersonsCount, 1), 20),
-        remarks: rowRemarks,
+        remarks: rowRemarks || null,
         customValues: Object.keys(customValues).length > 0 ? JSON.stringify(customValues) : null,
         syncStatus: "synced",
         lastSyncedAt: new Date(),

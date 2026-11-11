@@ -15,9 +15,7 @@ export async function GET(req: NextRequest) {
   const date = searchParams.get("date");
   const startDate = searchParams.get("startDate");
   const endDate = searchParams.get("endDate");
-  const shift = searchParams.get("shift");
   const factoryName = searchParams.get("factoryName");
-  const supervisedBy = searchParams.get("supervisedBy");
   const location = searchParams.get("location");
   const personName = searchParams.get("personName");
   const requestedLimit = Number.parseInt(searchParams.get("limit") || "100", 10);
@@ -38,17 +36,9 @@ export async function GET(req: NextRequest) {
     if (endDate) where.dateStr.lte = endDate;
   }
 
-  // Shift filter
-  if (shift && shift !== "all") {
-    where.shift = shift;
-  }
-
   // Text filters (case-insensitive substring)
   if (factoryName) {
     where.factoryName = { contains: factoryName };
-  }
-  if (supervisedBy) {
-    where.supervisedBy = { contains: supervisedBy };
   }
   if (location) {
     where.location = { contains: location };
@@ -102,8 +92,6 @@ export async function POST(req: NextRequest) {
         userId: session.user.id,
         dateStr: input.dateStr,
         date: validDate,
-        shift: input.shift,
-        supervisedBy: input.supervisedBy,
         factoryName: input.factoryName,
         location: input.location,
         personsCount: input.personsCount,

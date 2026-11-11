@@ -19,14 +19,16 @@ const encoder = new TextEncoder();
 const headers = [
   "Record ID",
   "Date",
-  "Shift",
-  "Supervised By",
   "Factory Name",
   "Location",
   "Persons",
   "Person Names",
   "Remarks",
 ];
+const workersByLocation: Record<string, string[]> = {
+  Mirpur: ["Palash", "Rezaul", "Rashed", "Polok"],
+  Narshinghpur: ["Tuhin", "Mithu", "Sajinur", "Sujon", "Sakil", "Shakib", "Susanto", "Rana", "Sagor", "Likhon", "Mamun", "Hussain"],
+};
 const json = (value: unknown, status = 200, extra: HeadersInit = {}) =>
   new Response(JSON.stringify(value), {
     status,
@@ -410,16 +412,14 @@ async function listRecords(request: Request, env: Env, user: User) {
   let where = " WHERE userId=?";
   for (const [column, query] of [
     ["dateStr", "date"],
-    ["shift", "shift"],
     ["factoryName", "factoryName"],
-    ["supervisedBy", "supervisedBy"],
     ["location", "location"],
   ] as const) {
     const value = url.searchParams.get(query);
     if (!value || value === "all") continue;
-    where += ` AND ${column} ${column === "dateStr" || column === "shift" ? "=" : "LIKE"} ?`;
+    where += ` AND ${column} ${column === "dateStr" ? "=" : "LIKE"} ?`;
     params.push(
-      column === "dateStr" || column === "shift" ? value : `%${value}%`,
+      column === "dateStr" ? value : `%${value}%`,
     );
   }
   if (url.searchParams.get("startDate")) {
@@ -447,7 +447,7 @@ async function listRecords(request: Request, env: Env, user: User) {
     : 0;
   const [summaryResult, recordResult] = await env.DB.batch([
     env.DB.prepare(
-      `SELECT COUNT(*) total, SUM(CASE WHEN shift='Day' THEN 1 ELSE 0 END) dayShifts, SUM(CASE WHEN shift='Night' THEN 1 ELSE 0 END) nightShifts, COALESCE(SUM(personsCount),0) personnel FROM ShiftRecord${where}`,
+      `SELECT COUNT(*) total, COALESCE(SUM(personsCount),0) personnel FROM ShiftRecord${where}`,
     ).bind(...params),
     env.DB.prepare(
       `SELECT * FROM ShiftRecord${where} ORDER BY dateStr DESC,createdAt DESC LIMIT ? OFFSET ?`,
@@ -482,8 +482,6 @@ async function listRecords(request: Request, env: Env, user: User) {
     offset,
     limit,
     summary: {
-      dayShifts: Number(summary.dayShifts || 0),
-      nightShifts: Number(summary.nightShifts || 0),
       personnel: Number(summary.personnel || 0),
     },
     dutyDays: dutyDays.results.map((entry) => ({
@@ -523,15 +521,13 @@ async function records(
     let sql = "SELECT * FROM ShiftRecord WHERE userId=?";
     for (const [c, q] of [
       ["dateStr", "date"],
-      ["shift", "shift"],
       ["factoryName", "factoryName"],
-      ["supervisedBy", "supervisedBy"],
       ["location", "location"],
     ] as const) {
       const v = u.searchParams.get(q);
       if (v && v !== "all") {
-        sql += ` AND ${c} ${c === "dateStr" || c === "shift" ? "=" : "LIKE"} ?`;
-        params.push(c === "dateStr" || c === "shift" ? v : `%${v}%`);
+        sql += ` AND ${c} ${c === "dateStr" ? "=" : "LIKE"} ?`;
+        params.push(c === "dateStr" ? v : `%${v}%`);
       }
     }
     if (u.searchParams.get("startDate")) {
@@ -581,8 +577,7 @@ async function records(
   const body = await request.json<Row>();
   if (
     !validDate(body.dateStr) ||
-    !["Day", "Night"].includes(String(body.shift)) ||
-    !["supervisedBy", "factoryName", "location"].every(
+    !["factoryName", "location"].every(
       (k) => typeof body[k] === "string" && String(body[k]).trim(),
     )
   )
@@ -593,6 +588,9 @@ async function records(
       { error: "Personnel headcount must be between 1 and 20." },
       400,
     );
+  if (body.remarks !== undefined && typeof body.remarks !== "string") return json({ error: "Remarks must be text." }, 400);
+  const remarks = String(body.remarks || "").trim();
+  if (remarks.length > 1000) return json({ error: "Remarks must be 1000 characters or fewer." }, 400);
   const record = recordId || id();
   const names = Array.isArray(body.personNames)
     ? body.personNames
@@ -601,6 +599,12 @@ async function records(
         .map((x) => x.trim())
         .filter(Boolean)
     : [];
+  const otherWorkerIndexes = Array.isArray(body.otherWorkerIndexes)
+    ? body.otherWorkerIndexes.filter((index): index is number => Number.isInteger(index) && index >= 0 && index < count)
+    : [];
+  const location = String(body.location).trim();
+  if (!workersByLocation[location] || names.some((name, index) => !otherWorkerIndexes.includes(index) && name !== "Hajira" && !workersByLocation[location].includes(name)))
+    return json({ error: "Worker is not assigned to this location." }, 400);
   if (names.length !== count || new Set(names).size !== names.length)
     return json({ error: "Select each worker once." }, 400);
   const assigned = await env.DB.batch(
@@ -615,24 +619,22 @@ async function records(
   const values = [
     String(body.dateStr),
     `${body.dateStr}T00:00:00.000Z`,
-    String(body.shift),
-    String(body.supervisedBy).trim(),
     String(body.factoryName).trim(),
     String(body.location).trim(),
     count,
-    body.remarks ? String(body.remarks).trim() : null,
+    remarks || null,
     body.customValues ? JSON.stringify(body.customValues) : null,
   ];
   if (recordId) {
     await env.DB.batch([
       env.DB.prepare("DELETE FROM RecordPerson WHERE recordId=?").bind(record),
       env.DB.prepare(
-        "UPDATE ShiftRecord SET dateStr=?,date=?,shift=?,supervisedBy=?,factoryName=?,location=?,personsCount=?,remarks=?,customValues=?,syncStatus='pending',updatedAt=CURRENT_TIMESTAMP WHERE id=? AND userId=?",
+        "UPDATE ShiftRecord SET dateStr=?,date=?,factoryName=?,location=?,personsCount=?,remarks=?,customValues=?,syncStatus='pending',updatedAt=CURRENT_TIMESTAMP WHERE id=? AND userId=?",
       ).bind(...values, record, user.id),
     ]);
   } else
     await env.DB.prepare(
-      "INSERT INTO ShiftRecord (id,userId,dateStr,date,shift,supervisedBy,factoryName,location,personsCount,remarks,customValues,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",
+      "INSERT INTO ShiftRecord (id,userId,dateStr,date,factoryName,location,personsCount,remarks,customValues,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",
     )
       .bind(record, user.id, ...values)
       .run();
@@ -657,7 +659,7 @@ async function suggestions(request: Request, env: Env, user: User) {
   ).trim();
   if (
     !field ||
-    !["supervisedBy", "factoryName", "location", "personName"].includes(field)
+    !["factoryName", "location", "personName"].includes(field)
   )
     return json({ error: "Invalid field" }, 400);
   const result =
@@ -913,8 +915,6 @@ async function syncRecord(env: Env, user: User, recordId: string) {
   const values: Record<string, string> = {
     "Record ID": String(record.id),
     Date: String(record.dateStr),
-    Shift: String(record.shift),
-    "Supervised By": String(record.supervisedBy),
     "Factory Name": String(record.factoryName),
     Location: String(record.location),
     Persons: String(record.personsCount),
@@ -1018,21 +1018,18 @@ async function importSheet(env: Env, user: User) {
   for (const row of rows.slice(1)) {
     const get = (name: string) => String(row[index[name]] || "").trim(),
       date = get("date"),
-      shift = get("shift").toLowerCase().includes("night") ? "Night" : "Day",
-      factory = get("factory name") || "Factory",
-      supervisor = get("supervised by") || "Supervisor";
+      factory = get("factory name") || "Factory";
     if (!validDate(date)) continue;
     const existing = await env.DB.prepare(
-      "SELECT id FROM ShiftRecord WHERE userId=? AND ((id=? AND ?<>'') OR (dateStr=? AND shift=? AND factoryName=? AND supervisedBy=?)) LIMIT 1",
+      "SELECT id FROM ShiftRecord WHERE userId=? AND ((id=? AND ?<>'') OR (dateStr=? AND factoryName=? AND location=?)) LIMIT 1",
     )
       .bind(
         user.id,
         get("record id"),
         get("record id"),
         date,
-        shift,
         factory,
-        supervisor,
+        get("location") || "Location",
       )
       .first();
     if (existing) continue;
@@ -1046,15 +1043,13 @@ async function importSheet(env: Env, user: User) {
         Math.max(1, Number.parseInt(get("persons"), 10) || names.length || 1),
       );
     await env.DB.prepare(
-      "INSERT INTO ShiftRecord (id,userId,dateStr,date,shift,supervisedBy,factoryName,location,personsCount,remarks,syncStatus,lastSyncedAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?, 'synced',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",
+      "INSERT INTO ShiftRecord (id,userId,dateStr,date,factoryName,location,personsCount,remarks,syncStatus,lastSyncedAt,updatedAt) VALUES (?,?,?,?,?,?,?,?,'synced',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",
     )
       .bind(
         recordId,
         user.id,
         date,
         `${date}T00:00:00.000Z`,
-        shift,
-        supervisor,
         factory,
         get("location") || "Location",
         count,

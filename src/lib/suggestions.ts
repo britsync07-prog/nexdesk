@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 
-export type SuggestionField = "supervisedBy" | "factoryName" | "location" | "personName";
+export type SuggestionField = "factoryName" | "location" | "personName";
 
 export interface SuggestionResult {
   value: string;
@@ -34,13 +34,6 @@ export async function getHistoricalSuggestions(
       take: 200,
     });
     rawValues = people.map((p) => ({ value: p.name.trim() }));
-  } else if (field === "supervisedBy") {
-    const records = await prisma.shiftRecord.findMany({
-      where: { userId, supervisedBy: { not: "" } },
-      select: { supervisedBy: true },
-      take: 200,
-    });
-    rawValues = records.map((r) => ({ value: r.supervisedBy.trim() }));
   } else if (field === "factoryName") {
     const records = await prisma.shiftRecord.findMany({
       where: { userId, factoryName: { not: "" } },

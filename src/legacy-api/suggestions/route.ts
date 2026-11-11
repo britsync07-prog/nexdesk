@@ -12,9 +12,9 @@ export async function GET(req: NextRequest) {
   const field = searchParams.get("field") as SuggestionField;
   const query = searchParams.get("query") || searchParams.get("q") || "";
 
-  if (!field || !["supervisedBy", "factoryName", "location", "personName"].includes(field)) {
+  if (!field || !["factoryName", "location", "personName"].includes(field)) {
     return NextResponse.json(
-      { error: "Invalid field. Must be supervisedBy, factoryName, location, or personName" },
+      { error: "Invalid field. Must be factoryName, location, or personName" },
       { status: 400 }
     );
   }

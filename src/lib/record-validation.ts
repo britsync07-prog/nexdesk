@@ -1,12 +1,11 @@
 export type ValidRecordInput = {
   dateStr: string;
-  shift: "Day" | "Night";
-  supervisedBy: string;
   factoryName: string;
   location: string;
   personsCount: number;
   personNames: string[];
   remarks: string | null;
+  otherWorkerIndexes: number[];
   customValues: Record<string, string | number | boolean | null> | null;
 };
 
@@ -40,10 +39,13 @@ export function parseRecordInput(value: unknown): ValidRecordInput {
 
   const count = Number(body.personsCount);
   if (!Number.isInteger(count) || count < 1 || count > 20) throw new Error("Personnel headcount must be between 1 and 20.");
-  if (body.shift !== "Day" && body.shift !== "Night") throw new Error("Shift must be Day or Night.");
   if (!Array.isArray(body.personNames) && body.personNames !== undefined) throw new Error("Person names must be an array.");
 
   const personNames = (body.personNames || []).slice(0, count).map((name, index) => text(name, `Person ${index + 1}`, false, 120) || "");
+  const otherWorkerIndexes = Array.isArray(body.otherWorkerIndexes) ? body.otherWorkerIndexes.filter((index): index is number => Number.isInteger(index) && index >= 0 && index < count) : [];
+  const location = text(body.location, "Location")!;
+  if (!LOCATIONS.includes(location as (typeof LOCATIONS)[number])) throw new Error("Location is invalid.");
+  if (personNames.some((name, index) => !otherWorkerIndexes.includes(index) && !isAllowedWorker(location, name))) throw new Error("Worker is not assigned to this location.");
   const customValues = body.customValues;
   if (customValues !== undefined && (customValues === null || typeof customValues !== "object" || Array.isArray(customValues))) {
     throw new Error("Custom values must be an object.");
@@ -59,13 +61,13 @@ export function parseRecordInput(value: unknown): ValidRecordInput {
 
   return {
     dateStr,
-    shift: body.shift,
-    supervisedBy: text(body.supervisedBy, "Supervisor")!,
     factoryName: text(body.factoryName, "Factory")!,
-    location: text(body.location, "Location")!,
+    location,
     personsCount: count,
     personNames,
-    remarks: text(body.remarks, "Remarks", false, 4_000),
+    remarks: text(body.remarks, "Remarks", false, 1000),
+    otherWorkerIndexes,
     customValues: normalizedCustomValues,
   };
 }
+import { isAllowedWorker, LOCATIONS } from "./workforce";

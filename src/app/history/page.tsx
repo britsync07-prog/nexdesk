@@ -25,9 +25,7 @@ export default function HistoryPage() {
     date: "",
     startDate: "",
     endDate: "",
-    shift: "all",
     factoryName: "",
-    supervisedBy: "",
     location: "",
     personName: "",
   });
@@ -39,9 +37,7 @@ export default function HistoryPage() {
       if (filters.date) params.set("date", filters.date);
       if (filters.startDate) params.set("startDate", filters.startDate);
       if (filters.endDate) params.set("endDate", filters.endDate);
-      if (filters.shift && filters.shift !== "all") params.set("shift", filters.shift);
       if (filters.factoryName) params.set("factoryName", filters.factoryName);
-      if (filters.supervisedBy) params.set("supervisedBy", filters.supervisedBy);
       if (filters.location) params.set("location", filters.location);
       if (filters.personName) params.set("personName", filters.personName);
       params.set("limit", String(PAGE_SIZE));
@@ -81,7 +77,7 @@ export default function HistoryPage() {
       .then((data) => {
         if (data.columns) {
           setCustomColumns(
-            data.columns.filter((c: { key: string }) => c.key !== "employee_list").map((c: { key: string; name: string }) => ({
+            data.columns.filter((c: { key: string }) => !["employee_list", "factory_list", "location_section_list"].includes(c.key)).map((c: { key: string; name: string }) => ({
               key: c.key,
               name: c.name,
             }))
@@ -97,9 +93,7 @@ export default function HistoryPage() {
       date: "",
       startDate: "",
       endDate: "",
-      shift: "all",
       factoryName: "",
-      supervisedBy: "",
       location: "",
       personName: "",
     });
@@ -120,20 +114,19 @@ export default function HistoryPage() {
   const pdfRecords = records.flatMap((r) => {
     let customValues: Record<string, string> = {};
     try { customValues = r.customValues ? JSON.parse(r.customValues) : {}; } catch { /* ignore malformed historic data */ }
-    const notes = Array.isArray(customValues.__personNotes) ? customValues.__personNotes as string[] : [];
-    delete customValues.__personNotes;
     if (!filters.personName) return [{
-      id: r.id, dateStr: r.dateStr, shift: r.shift, supervisedBy: r.supervisedBy,
+      id: r.id, dateStr: r.dateStr,
       factoryName: r.factoryName, location: r.location, personsCount: r.personsCount,
-      personNames: r.persons?.map((p) => p.name) || [], remarks: r.remarks, customValues,
+      remarks: r.remarks,
+      personNames: r.persons?.map((p) => p.name) || [], customValues,
     }];
     return (r.persons || [])
       .filter((person) => person.name.toLowerCase().includes(filters.personName.toLowerCase()))
       .map((person) => ({
-        id: r.id, dateStr: r.dateStr, shift: r.shift, supervisedBy: r.supervisedBy,
+        id: r.id, dateStr: r.dateStr,
         factoryName: r.factoryName, location: r.location, personsCount: r.personsCount,
-        personNames: [person.name], employeeNote: notes[person.personIndex - 1] || "",
-        remarks: r.remarks, customValues,
+        remarks: r.remarks,
+        personNames: [person.name], customValues,
       }));
   });
 
@@ -149,7 +142,7 @@ export default function HistoryPage() {
               Shift Records History
             </h1>
             <p className="text-xs text-zinc-400">
-              Filter records by date, supervisor, worker name, or location, and export filtered reports.
+              Filter records by date, worker name, factory, or location, and export filtered reports.
             </p>
           </div>
 
@@ -160,9 +153,7 @@ export default function HistoryPage() {
                 date: filters.date,
                 startDate: filters.startDate,
                 endDate: filters.endDate,
-                shift: filters.shift,
                 factoryName: filters.factoryName,
-                supervisedBy: filters.supervisedBy,
                 location: filters.location,
                 personName: filters.personName,
                 totalRecords: records.length,

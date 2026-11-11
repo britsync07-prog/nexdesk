@@ -64,8 +64,6 @@ model ShiftRecord {
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   dateStr       String         // YYYY-MM-DD for zero timezone offset issues
   date          DateTime
-  shift         String         // Day or Night
-  supervisedBy  String
   factoryName   String
   location      String
   personsCount  Int            @default(1)
@@ -80,8 +78,6 @@ model ShiftRecord {
   persons       RecordPerson[]
 
   @@index([userId, dateStr])
-  @@index([userId, shift])
-  @@index([userId, supervisedBy])
   @@index([userId, factoryName])
   @@index([userId, location])
 }

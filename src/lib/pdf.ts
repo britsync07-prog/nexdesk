@@ -4,14 +4,11 @@ import autoTable from "jspdf-autotable";
 export interface PDFExportRecord {
   id: string;
   dateStr: string;
-  shift: string;
-  supervisedBy: string;
   factoryName: string;
   location: string;
   personsCount: number;
-  personNames: string[];
-  employeeNote?: string;
   remarks?: string | null;
+  personNames: string[];
   customValues?: Record<string, string>;
 }
 
@@ -19,9 +16,7 @@ export interface PDFExportFilterSummary {
   date?: string;
   startDate?: string;
   endDate?: string;
-  shift?: string;
   factoryName?: string;
-  supervisedBy?: string;
   location?: string;
   personName?: string;
   totalRecords: number;
@@ -66,9 +61,7 @@ export function generateShiftLogPDF(
   } else if (filterSummary.date) {
     filterTags.push(`Date: ${filterSummary.date}`);
   }
-  if (filterSummary.shift && filterSummary.shift !== "all") filterTags.push(`Shift: ${filterSummary.shift}`);
   if (filterSummary.factoryName) filterTags.push(`Factory: ${filterSummary.factoryName}`);
-  if (filterSummary.supervisedBy) filterTags.push(`Supervisor: ${filterSummary.supervisedBy}`);
   if (filterSummary.location) filterTags.push(`Location: ${filterSummary.location}`);
   if (filterSummary.personName) filterTags.push(`Personnel: ${filterSummary.personName}`);
 
@@ -86,20 +79,17 @@ export function generateShiftLogPDF(
     });
     const formattedNames =
       record.personNames && record.personNames.length > 0
-        ? record.personNames.filter(Boolean).join(", ")
+        ? record.personNames.filter(Boolean).join(" + ")
         : "-";
     return [
       String(index + 1),
       record.dateStr,
-      record.shift,
-      record.supervisedBy,
       record.factoryName,
       record.location,
       String(record.personsCount),
       formattedNames,
-      ...(filterSummary.personName ? [record.employeeNote || "-"] : []),
+      record.remarks || "",
       ...customCells,
-      record.remarks || "-",
     ];
   });
 
@@ -107,10 +97,10 @@ export function generateShiftLogPDF(
   autoTable(doc, {
     startY: 30,
     head: [[
-      "#", "Date", "Shift", "Supervisor", "Factory", "Location", "Shift Headcount",
+      "#", "Date", "Factory", "Location", "Personnel",
       filterSummary.personName ? "Employee" : "Personnel Names",
-      ...(filterSummary.personName ? ["Attendance / Personal Note"] : []),
-      ...customColumns.map((col) => col.name), "Remarks",
+      "Remarks",
+      ...customColumns.map((col) => col.name),
     ]],
     body: tableData,
     theme: "grid",
@@ -132,13 +122,10 @@ export function generateShiftLogPDF(
     columnStyles: {
       0: { cellWidth: 8, halign: "center" },
       1: { cellWidth: 20 },
-      2: { cellWidth: 15 },
-      3: { cellWidth: 25 },
-      4: { cellWidth: 25 },
-      5: { cellWidth: 22 },
-      6: { cellWidth: 18, halign: "center" },
-      7: { cellWidth: filterSummary.personName ? 26 : 46 },
-      ...(filterSummary.personName ? { 8: { cellWidth: 32 } } : {}),
+      2: { cellWidth: 32 },
+      3: { cellWidth: 28 },
+      4: { cellWidth: 18, halign: "center" },
+      5: { cellWidth: filterSummary.personName ? 36 : 56 },
     },
     margin: { left: 14, right: 14, bottom: 18 },
     didDrawPage: () => {

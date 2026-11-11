@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { AutocompleteInput } from "./autocomplete-input";
 import { PersonCounter } from "./person-counter";
-import { Sun, Moon, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { AutocompleteInput } from "./autocomplete-input";
+import { CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { LOCATIONS, WORKERS_BY_LOCATION } from "@/lib/workforce";
 
 interface CustomColumnDef {
   id: string;
@@ -19,8 +20,6 @@ interface RecordFormProps {
   initialRecord?: {
     id: string;
     dateStr: string;
-    shift: string;
-    supervisedBy: string;
     factoryName: string;
     location: string;
     personsCount: number;
@@ -37,10 +36,6 @@ export function RecordForm({ initialRecord, onSuccess }: RecordFormProps) {
   // Predefined fields
   const todayStr = new Date().toISOString().split("T")[0];
   const [dateStr, setDateStr] = useState(initialRecord?.dateStr || todayStr);
-  const [shift, setShift] = useState<"Day" | "Night">(
-    (initialRecord?.shift as "Day" | "Night") || "Day"
-  );
-  const [supervisedBy, setSupervisedBy] = useState(initialRecord?.supervisedBy || "");
   const [factoryName, setFactoryName] = useState(initialRecord?.factoryName || "");
   const [location, setLocation] = useState(initialRecord?.location || "");
   const [personsCount, setPersonsCount] = useState<number>(initialRecord?.personsCount || 1);
@@ -58,18 +53,13 @@ export function RecordForm({ initialRecord, onSuccess }: RecordFormProps) {
     }
     return arr;
   });
-  const [personNotes, setPersonNotes] = useState<string[]>(() => {
-    try {
-      const notes = JSON.parse(initialRecord?.customValues || "{}").__personNotes;
-      return Array.isArray(notes) ? Array.from({ length: 20 }, (_, index) => String(notes[index] || "")) : Array(20).fill("");
-    } catch {
-      return Array(20).fill("");
-    }
-  });
-
+  const [otherWorkerIndexes, setOtherWorkerIndexes] = useState<Set<number>>(() => new Set(
+    (initialRecord?.persons || []).flatMap((person, index) =>
+      person.name !== "Hajira" && !(WORKERS_BY_LOCATION[initialRecord?.location as keyof typeof WORKERS_BY_LOCATION] || []).includes(person.name as never) ? [index] : [],
+    ),
+  ));
   // Custom Columns & Values
   const [customColumns, setCustomColumns] = useState<CustomColumnDef[]>([]);
-  const [employeeOptions, setEmployeeOptions] = useState<string[]>([]);
   const [unavailableEmployees, setUnavailableEmployees] = useState<Set<string>>(new Set());
   const [customValues, setCustomValues] = useState<Record<string, string>>(() => {
     if (initialRecord?.customValues) {
@@ -110,11 +100,7 @@ export function RecordForm({ initialRecord, onSuccess }: RecordFormProps) {
       if (res.ok) {
         const data = await res.json();
         const columns = data.columns || [];
-        setCustomColumns(columns.filter((column: CustomColumnDef) => column.key !== "employee_list"));
-        const employeeColumn = columns.find((column: CustomColumnDef) => column.key === "employee_list");
-        if (employeeColumn?.options) {
-          try { setEmployeeOptions(JSON.parse(employeeColumn.options)); } catch { setEmployeeOptions([]); }
-        }
+        setCustomColumns(columns.filter((column: CustomColumnDef) => !["employee_list", "factory_list", "location_section_list"].includes(column.key)));
       }
     } catch {
       // ignore
@@ -128,12 +114,20 @@ export function RecordForm({ initialRecord, onSuccess }: RecordFormProps) {
       return next;
     });
   };
-  const handlePersonNoteChange = (index: number, note: string) => setPersonNotes((previous) => {
-    const next = [...previous];
-    next[index] = note;
-    return next;
-  });
-
+  const handleWorkerSelectionChange = (index: number, value: string) => {
+    setOtherWorkerIndexes((previous) => {
+      const next = new Set(previous);
+      if (value === "__other__") next.add(index);
+      else next.delete(index);
+      return next;
+    });
+    handlePersonNameChange(index, value === "__other__" ? "" : value);
+  };
+  const handleLocationChange = (nextLocation: string) => {
+    setLocation(nextLocation);
+    setPersonNames(Array(20).fill(""));
+    setOtherWorkerIndexes(new Set());
+  };
   const selectedElsewhere = (index: number) => new Set(
     personNames.filter((name, currentIndex) => currentIndex !== index && name),
   );
@@ -148,8 +142,8 @@ export function RecordForm({ initialRecord, onSuccess }: RecordFormProps) {
     setSuccessMessage(null);
 
     // Basic validation
-    if (!dateStr || !supervisedBy.trim() || !factoryName.trim() || !location.trim()) {
-      setErrorMessage("Please fill in all required fields (Date, Supervisor, Factory, Location).");
+    if (!dateStr || !factoryName.trim() || !location.trim()) {
+      setErrorMessage("Please fill in all required fields (Date, Factory, Location).");
       return;
     }
     if (personNames.slice(0, personsCount).some((name) => !name.trim())) {
@@ -169,14 +163,13 @@ export function RecordForm({ initialRecord, onSuccess }: RecordFormProps) {
 
     const payload = {
       dateStr,
-      shift,
-      supervisedBy: supervisedBy.trim(),
       factoryName: factoryName.trim(),
       location: location.trim(),
       personsCount,
+      remarks: remarks.trim() || null,
       personNames: personNames.slice(0, personsCount),
-      remarks: remarks.trim(),
-      customValues: { ...customValues, __personNotes: personNotes.slice(0, personsCount) },
+      otherWorkerIndexes: personNames.slice(0, personsCount).flatMap((name, index) => name && !((WORKERS_BY_LOCATION[location as keyof typeof WORKERS_BY_LOCATION] || []) as readonly string[]).includes(name) && name !== "Hajira" ? [index] : []),
+      customValues,
     };
 
     try {
@@ -227,7 +220,6 @@ export function RecordForm({ initialRecord, onSuccess }: RecordFormProps) {
         </div>
       )}
 
-      {/* Date & Shift Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Date Field */}
         <div>
@@ -244,72 +236,26 @@ export function RecordForm({ initialRecord, onSuccess }: RecordFormProps) {
           />
         </div>
 
-        {/* Day / Night Shift Selector */}
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-[#131416]">
-            Shift Type <span className="text-red-400">*</span>
+          <label htmlFor="factoryName" className="mb-1.5 block text-sm font-medium text-[#131416]">
+            Factory Name <span className="text-red-400">*</span>
           </label>
-          <div className="grid grid-cols-2 gap-2 h-10">
-            <button
-              type="button"
-              onClick={() => setShift("Day")}
-              className={`flex items-center justify-center gap-2 rounded-xl text-xs font-semibold transition-all ${
-                shift === "Day"
-                  ? "border border-[#1b6c80] bg-[#e5f1f4] text-[#135464]"
-                  : "border border-[#cdced1] bg-white text-[#5d5f60] hover:bg-[#f4f6f8]"
-              }`}
-            >
-              <Sun className="w-4 h-4 text-amber-400" />
-              <span>Day Shift</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setShift("Night")}
-              className={`flex items-center justify-center gap-2 rounded-xl text-xs font-semibold transition-all ${
-                shift === "Night"
-                  ? "border border-[#1b6c80] bg-[#e5f1f4] text-[#135464]"
-                  : "border border-[#cdced1] bg-white text-[#5d5f60] hover:bg-[#f4f6f8]"
-              }`}
-            >
-              <Moon className="w-4 h-4 text-indigo-400" />
-              <span>Night Shift</span>
-            </button>
-          </div>
+          <AutocompleteInput id="factoryName" field="factoryName" value={factoryName} onChange={setFactoryName} placeholder="Enter factory name" required />
         </div>
       </div>
 
-      {/* Supervised By & Factory Name */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <AutocompleteInput
-          id="supervisedBy"
-          field="supervisedBy"
-          value={supervisedBy}
-          onChange={setSupervisedBy}
-          label="Supervised By"
-          placeholder="e.g. Tuhin Hossain"
-          required
-        />
-        <AutocompleteInput
-          id="factoryName"
-          field="factoryName"
-          value={factoryName}
-          onChange={setFactoryName}
-          label="Factory Name"
-          placeholder="e.g. Unit-2 Spinning"
-          required
-        />
+      <div>
+        <label htmlFor="location" className="mb-1.5 block text-sm font-medium text-[#131416]">Location / Section <span className="text-red-400">*</span></label>
+        <select id="location" value={location} onChange={(e) => handleLocationChange(e.target.value)} required className="w-full rounded-md border border-[#cdced1] bg-white px-3.5 py-2.5 text-sm text-[#131416]">
+          <option value="">Select location / section</option>
+          {LOCATIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
       </div>
 
-      {/* Location */}
-      <AutocompleteInput
-        id="location"
-        field="location"
-        value={location}
-        onChange={setLocation}
-        label="Location / Section"
-        placeholder="e.g. Floor 3, Line B"
-        required
-      />
+      <div>
+        <label htmlFor="remarks" className="mb-1.5 block text-sm font-medium text-[#131416]">Remarks</label>
+        <textarea id="remarks" value={remarks} onChange={(e) => setRemarks(e.target.value)} maxLength={1000} rows={3} placeholder="Add any note or remark" className="w-full rounded-md border border-[#cdced1] bg-white px-3.5 py-2.5 text-sm text-[#131416] focus:border-[#1b6c80] focus:outline-none focus:ring-2 focus:ring-[#1b6c80]/20" />
+      </div>
 
       {/* Headcount Stepper (1 to 20) */}
       <div className="space-y-4 rounded-lg bg-[#f4f6f8] p-4">
@@ -330,30 +276,30 @@ export function RecordForm({ initialRecord, onSuccess }: RecordFormProps) {
                 <span className="w-6 shrink-0 text-center text-xs tabular-nums text-[#5d5f60]">
                   {i + 1}.
                 </span>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {employeeOptions.length ? (
+                <div>
+                  {location ? (
+                    <>
                     <select
-                      value={personNames[i] || ""}
-                      onChange={(e) => handlePersonNameChange(i, e.target.value)}
+                      value={otherWorkerIndexes.has(i) ? "__other__" : (WORKERS_BY_LOCATION[location as keyof typeof WORKERS_BY_LOCATION] || []).includes(personNames[i] as never) || personNames[i] === "Hajira" ? personNames[i] : ""}
+                      onChange={(e) => handleWorkerSelectionChange(i, e.target.value)}
                       className="w-full rounded-md border border-[#cdced1] bg-white px-3 py-2 text-sm text-[#131416]"
                     >
                       <option value="">Select worker</option>
-                      {employeeOptions.map((employee) => (
+                      <option value="Hajira" disabled={unavailableEmployees.has("Hajira") || selectedElsewhere(i).has("Hajira")}>Hajira</option>
+                      {(WORKERS_BY_LOCATION[location as keyof typeof WORKERS_BY_LOCATION] || []).map((employee) => (
                         <option key={employee} value={employee} disabled={unavailableEmployees.has(employee) || selectedElsewhere(i).has(employee)}>
                           {employee}{unavailableEmployees.has(employee) ? " (already assigned today)" : ""}
                         </option>
                       ))}
+                      <option value="__other__">Others</option>
                     </select>
+                    {otherWorkerIndexes.has(i) && (
+                      <input value={personNames[i] || ""} onChange={(e) => handlePersonNameChange(i, e.target.value)} placeholder="Enter worker name" className="mt-2 w-full rounded-md border border-[#cdced1] bg-white px-3 py-2 text-sm text-[#131416]" />
+                    )}
+                    </>
                   ) : (
-                    <AutocompleteInput field="personName" value={personNames[i] || ""} onChange={(val) => handlePersonNameChange(i, val)} placeholder={`Worker ${i + 1} Name`} className="py-2" />
+                    <><select value={otherWorkerIndexes.has(i) ? "__other__" : personNames[i] === "Hajira" ? "Hajira" : ""} onChange={(e) => handleWorkerSelectionChange(i, e.target.value)} className="w-full rounded-md border border-[#cdced1] bg-white px-3 py-2 text-sm text-[#131416]"><option value="">Select worker</option><option value="Hajira">Hajira</option><option value="__other__">Others</option></select>{otherWorkerIndexes.has(i) && <input value={personNames[i] || ""} onChange={(e) => handlePersonNameChange(i, e.target.value)} placeholder="Enter worker name" className="mt-2 w-full rounded-md border border-[#cdced1] bg-white px-3 py-2 text-sm text-[#131416]" />}</>
                   )}
-                  <input
-                    type="text"
-                    value={personNotes[i] || ""}
-                    onChange={(e) => handlePersonNoteChange(i, e.target.value)}
-                    placeholder="Hajira / personal note"
-                    className="w-full rounded-md border border-[#cdced1] bg-white px-3 py-2 text-sm text-[#131416]"
-                  />
                 </div>
               </div>
             ))}
@@ -431,21 +377,6 @@ export function RecordForm({ initialRecord, onSuccess }: RecordFormProps) {
           </div>
         </div>
       )}
-
-      {/* Remarks Textarea */}
-      <div>
-        <label htmlFor="remarks" className="mb-1.5 block text-sm font-medium text-[#131416]">
-          Operational Remarks & Notes
-        </label>
-        <textarea
-          id="remarks"
-          value={remarks}
-          onChange={(e) => setRemarks(e.target.value)}
-          rows={3}
-          placeholder="e.g. Line 3 motor repaired; 4 hours overtime scheduled for next shift..."
-          className="w-full rounded-md border border-[#cdced1] bg-white px-3.5 py-2.5 text-sm text-[#131416] placeholder:text-[#777a7c] focus:border-[#1b6c80] focus:outline-none focus:ring-2 focus:ring-[#1b6c80]/20"
-        />
-      </div>
 
       {/* Save Button */}
       <button

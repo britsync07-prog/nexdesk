@@ -61,8 +61,6 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         data: {
           dateStr: input.dateStr,
           date: validDate,
-          shift: input.shift,
-          supervisedBy: input.supervisedBy,
           factoryName: input.factoryName,
           location: input.location,
           personsCount: input.personsCount,

@@ -3,12 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
-  Sun,
-  Moon,
   Users,
   MapPin,
   Building,
-  User,
   Calendar,
   Cloud,
   CloudOff,
@@ -22,8 +19,6 @@ import {
 export interface RecordItem {
   id: string;
   dateStr: string;
-  shift: string;
-  supervisedBy: string;
   factoryName: string;
   location: string;
   personsCount: number;
@@ -52,8 +47,6 @@ export function RecordCard({ record, onDelete }: RecordCardProps) {
       // ignore
     }
   }
-  const personNotes = Array.isArray(customMap.__personNotes) ? customMap.__personNotes as unknown as string[] : [];
-  delete customMap.__personNotes;
 
   const handleDelete = async () => {
     setIsDeleting(true);
@@ -70,25 +63,11 @@ export function RecordCard({ record, onDelete }: RecordCardProps) {
     }
   };
 
-  const isNight = record.shift.toLowerCase() === "night";
-
   return (
     <div className="rounded-2xl bg-[#121215] border border-zinc-800/90 hover:border-zinc-700/80 transition-all p-4 space-y-3 shadow-sm">
       {/* Top Meta Bar */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          {/* Shift Badge */}
-          <span
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${
-              isNight
-                ? "bg-indigo-500/15 text-indigo-400 border border-indigo-500/30"
-                : "bg-amber-500/15 text-amber-400 border border-amber-500/30"
-            }`}
-          >
-            {isNight ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
-            <span>{record.shift} Shift</span>
-          </span>
-
           {/* Date */}
           <span className="text-xs font-mono font-medium text-zinc-300 flex items-center gap-1">
             <Calendar className="w-3.5 h-3.5 text-zinc-500" />
@@ -133,10 +112,6 @@ export function RecordCard({ record, onDelete }: RecordCardProps) {
           <MapPin className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
           <span className="truncate">{record.location}</span>
         </div>
-        <div className="flex items-center gap-1.5 text-zinc-400">
-          <User className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-          <span className="truncate">Sup: {record.supervisedBy}</span>
-        </div>
         <div className="flex items-center gap-1.5 text-blue-400 font-mono font-semibold">
           <Users className="w-3.5 h-3.5 text-blue-400 shrink-0" />
           <span>{record.personsCount} Personnel</span>
@@ -150,7 +125,6 @@ export function RecordCard({ record, onDelete }: RecordCardProps) {
             {record.persons.slice(0, isExpanded ? 20 : 5).map((p) => (
               <span key={p.id} className="inline-block rounded-md bg-zinc-800/90 px-2 py-0.5 text-[11px] font-medium text-zinc-300">
                 {p.name || `Person ${p.personIndex}`}
-                {personNotes[p.personIndex - 1] ? <span className="ml-1 text-zinc-500">— {personNotes[p.personIndex - 1]}</span> : null}
               </span>
             ))}
             {!isExpanded && record.persons.length > 5 && (
@@ -162,9 +136,10 @@ export function RecordCard({ record, onDelete }: RecordCardProps) {
         </div>
       )}
 
-      {/* Expandable Section for Custom Fields & Remarks */}
+      {/* Expandable Section for Custom Fields */}
       {isExpanded && (
         <div className="pt-3 border-t border-zinc-800 space-y-2 text-xs animate-in fade-in duration-150">
+          {record.remarks && <div className="space-y-1"><span className="text-[10px] font-mono uppercase text-zinc-500">Remarks:</span><p className="text-zinc-200 whitespace-pre-wrap">{record.remarks}</p></div>}
           {Object.keys(customMap).length > 0 && (
             <div className="space-y-1">
               <span className="text-[10px] font-mono uppercase text-zinc-500">Custom Fields:</span>
@@ -179,11 +154,6 @@ export function RecordCard({ record, onDelete }: RecordCardProps) {
             </div>
           )}
 
-          {record.remarks && (
-            <div className="bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800/60 text-zinc-300 italic">
-              &ldquo;{record.remarks}&rdquo;
-            </div>
-          )}
         </div>
       )}
 

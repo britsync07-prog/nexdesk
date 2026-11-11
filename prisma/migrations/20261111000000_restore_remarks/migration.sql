@@ -1,0 +1,1 @@
+ALTER TABLE "ShiftRecord" ADD COLUMN "remarks" TEXT;

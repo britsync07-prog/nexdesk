@@ -101,7 +101,7 @@ export default function SettingsPage() {
         if (employeeColumn?.options) {
           try { setEmployees(JSON.parse(employeeColumn.options)); } catch { setEmployees([]); }
         }
-        setCustomColumns(columns.filter((column: CustomColumnItem) => column.key !== "employee_list"));
+        setCustomColumns(columns.filter((column: CustomColumnItem) => !["employee_list", "factory_list", "location_section_list"].includes(column.key)));
       }
     } catch {
       // ignore
@@ -225,6 +225,28 @@ export default function SettingsPage() {
     if (!name || employees.some((employee) => employee.toLowerCase() === name.toLowerCase())) return;
     setEmployees((current) => [...current, name]);
     setEmployeeName("");
+  };
+
+  const saveDropdown = async (name: string, options: string[], success: string) => {
+    setIsSavingEmployees(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/custom-columns", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, type: "SELECT", options, required: false }) });
+      const data = await res.json();
+      setMessage(res.ok ? { type: "success", text: success } : { type: "error", text: data.error || "Failed to save dropdown" });
+      if (res.ok) await loadSettingsData();
+    } catch {
+      setMessage({ type: "error", text: "Failed to save dropdown" });
+    } finally {
+      setIsSavingEmployees(false);
+    }
+  };
+
+  const addOption = (value: string, options: string[], setOptions: (options: string[]) => void, setValue: (value: string) => void) => {
+    const option = value.trim();
+    if (!option || options.some((item) => item.toLowerCase() === option.toLowerCase())) return;
+    setOptions([...options, option]);
+    setValue("");
   };
 
   const handleDeleteColumn = async (col: CustomColumnItem) => {
@@ -580,7 +602,7 @@ export default function SettingsPage() {
               ShiftLog operates strictly on a supervisor-isolated multi-tenant model. We access your Google account solely to authenticate your identity and synchronize designated shift log spreadsheets to your own Google Drive.
             </p>
             <p>
-              We do not share, sell, or index your worker names or operational remarks. All database records remain bound to your authenticated user identifier.
+              We do not share, sell, or index your worker names or operational data. All database records remain bound to your authenticated user identifier.
             </p>
           </div>
         </div>

@@ -1,16 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Filter, X, Calendar, Sun } from "lucide-react";
+import { Filter, X, Calendar } from "lucide-react";
 import { AutocompleteInput } from "./autocomplete-input";
 
 export interface FilterState {
   date: string;
   startDate: string;
   endDate: string;
-  shift: string;
   factoryName: string;
-  supervisedBy: string;
   location: string;
   personName: string;
 }
@@ -29,11 +27,7 @@ export function FilterBar({ filters, onChange, onClear, resultCount }: FilterBar
   if (filters.date) activeFilterList.push({ key: "date", label: "Date", value: filters.date });
   if (filters.startDate) activeFilterList.push({ key: "startDate", label: "From", value: filters.startDate });
   if (filters.endDate) activeFilterList.push({ key: "endDate", label: "To", value: filters.endDate });
-  if (filters.shift && filters.shift !== "all") {
-    activeFilterList.push({ key: "shift", label: "Shift", value: filters.shift });
-  }
   if (filters.factoryName) activeFilterList.push({ key: "factoryName", label: "Factory", value: filters.factoryName });
-  if (filters.supervisedBy) activeFilterList.push({ key: "supervisedBy", label: "Supervisor", value: filters.supervisedBy });
   if (filters.location) activeFilterList.push({ key: "location", label: "Location", value: filters.location });
   if (filters.personName) activeFilterList.push({ key: "personName", label: "Worker", value: filters.personName });
 
@@ -144,27 +138,9 @@ export function FilterBar({ filters, onChange, onClear, resultCount }: FilterBar
               />
             </div>
 
-            {/* Shift */}
-            <div>
-              <label className="block text-[11px] font-medium text-zinc-400 mb-1 flex items-center gap-1">
-                <Sun className="w-3 h-3 text-amber-400" /> Shift
-              </label>
-              <select
-                value={filters.shift}
-                onChange={(e) => onChange({ ...filters, shift: e.target.value })}
-                className="w-full bg-[#18181b] border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100"
-              >
-                <option value="all">All Shifts</option>
-                <option value="Day">Day Shift</option>
-                <option value="Night">Night Shift</option>
-              </select>
-            </div>
-
             <AutocompleteInput field="personName" label="Worker name" placeholder="e.g. Tuhin" value={filters.personName} onChange={(personName) => onChange({ ...filters, personName })} />
 
             <AutocompleteInput field="factoryName" label="Factory" placeholder="e.g. Unit 2" value={filters.factoryName} onChange={(factoryName) => onChange({ ...filters, factoryName })} />
-
-            <AutocompleteInput field="supervisedBy" label="Supervisor" placeholder="Supervisor name" value={filters.supervisedBy} onChange={(supervisedBy) => onChange({ ...filters, supervisedBy })} />
 
             <AutocompleteInput field="location" label="Location" placeholder="Section / Floor" value={filters.location} onChange={(location) => onChange({ ...filters, location })} />
           </div>

@@ -9,7 +9,7 @@ import type { RecordItem } from "@/components/record-card";
 
 type Session = { id: string; email: string; name: string | null };
 type SyncState = { spreadsheetId?: string; spreadsheetName?: string; syncStatus?: string };
-type RecordSummary = { dayShifts: number; nightShifts: number; personnel: number };
+type RecordSummary = { personnel: number };
 
 const today = new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric" });
 
@@ -18,7 +18,7 @@ export default function DashboardPage() {
   const [user, setUser] = useState<Session | null>(null);
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [totalRecords, setTotalRecords] = useState(0);
-  const [summary, setSummary] = useState<RecordSummary>({ dayShifts: 0, nightShifts: 0, personnel: 0 });
+  const [summary, setSummary] = useState<RecordSummary>({ personnel: 0 });
   const [sync, setSync] = useState<SyncState>({});
 
   useEffect(() => {
@@ -32,7 +32,7 @@ export default function DashboardPage() {
         setUser(session.user);
         setRecords(recordData.records || []);
         setTotalRecords(recordData.total || 0);
-        setSummary(recordData.summary || { dayShifts: 0, nightShifts: 0, personnel: 0 });
+        setSummary(recordData.summary || { personnel: 0 });
         setSync(syncData);
       })
       .catch(() => router.replace("/login"));
@@ -52,7 +52,7 @@ export default function DashboardPage() {
               <p className="mt-2 text-sm text-[#5d5f60]">
                 {totalRecords
                   ? `${totalRecords} logged shifts with ${summary.personnel} people recorded.`
-                  : "Start the shift history with the first supervisor log."}
+                  : "Start the shift history with the first record."}
               </p>
             </div>
             <Link
@@ -63,11 +63,9 @@ export default function DashboardPage() {
             </Link>
           </header>
 
-          <section aria-label="Shift totals" className="grid divide-y divide-[#e8eaec] overflow-hidden rounded-lg border border-[#e8eaec] sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+          <section aria-label="Record totals" className="grid divide-y divide-[#e8eaec] overflow-hidden rounded-lg border border-[#e8eaec] sm:grid-cols-2 sm:divide-x sm:divide-y-0">
             {[
               ["Logged shifts", totalRecords],
-              ["Day shifts", summary.dayShifts],
-              ["Night shifts", summary.nightShifts],
               ["Personnel", summary.personnel],
             ].map(([label, value]) => (
               <div key={String(label)} className="px-5 py-4">
@@ -94,9 +92,9 @@ export default function DashboardPage() {
                     <Link key={record.id} href={`/add-record?edit=${record.id}`} className="grid gap-1 px-5 py-4 transition-colors hover:bg-[#f9fbfc] sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:gap-6">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-[#131416]">{record.factoryName}</p>
-                        <p className="mt-1 truncate text-sm text-[#5d5f60]">{record.location} · {record.supervisedBy}</p>
+                        <p className="mt-1 truncate text-sm text-[#5d5f60]">{record.location}</p>
                       </div>
-                      <p className="text-sm text-[#5d5f60]">{record.dateStr} · {record.shift}</p>
+                      <p className="text-sm text-[#5d5f60]">{record.dateStr}</p>
                       <p className="text-right text-sm font-medium tabular-nums text-[#131416]">{record.personsCount} people</p>
                     </Link>
                   ))}
