@@ -19,6 +19,7 @@ export default function HistoryPage() {
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [customColumns, setCustomColumns] = useState<PDFCustomColumnDef[]>([]);
+  const [workerRoster, setWorkerRoster] = useState<string[]>([]);
   const [dutyDays, setDutyDays] = useState<{ name: string; dutyDays: number }[]>([]);
 
   const [filters, setFilters] = useState<FilterState>({
@@ -82,6 +83,17 @@ export default function HistoryPage() {
               name: c.name,
             }))
           );
+          const empCol = data.columns.find((c: { key: string }) => c.key === "employee_list");
+          if (empCol?.options) {
+            try {
+              const parsed = JSON.parse(empCol.options);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                setWorkerRoster(parsed);
+              }
+            } catch {
+              // ignore
+            }
+          }
         }
       })
       .catch(() => {});
@@ -159,6 +171,7 @@ export default function HistoryPage() {
                 totalRecords: records.length,
               }}
               customColumns={customColumns}
+              workerRoster={workerRoster.length > 0 ? workerRoster : undefined}
             />
 
             <Link

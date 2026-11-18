@@ -8,12 +8,14 @@ interface PDFExportButtonProps {
   records: PDFExportRecord[];
   filterSummary: PDFExportFilterSummary;
   customColumns?: PDFCustomColumnDef[];
+  workerRoster?: string[];
 }
 
 export function PDFExportButton({
   records,
   filterSummary,
   customColumns = [],
+  workerRoster,
 }: PDFExportButtonProps) {
   const [isExporting, setIsExporting] = useState(false);
 
@@ -28,7 +30,7 @@ export function PDFExportButton({
       // Yield to main thread so loading spinner renders
       await new Promise((r) => setTimeout(r, 50));
 
-      const doc = generateShiftLogPDF(records, filterSummary, customColumns);
+      const doc = generateShiftLogPDF(records, filterSummary, customColumns, workerRoster);
       const filenameDate =
         filterSummary.startDate && filterSummary.endDate
           ? `${filterSummary.startDate}_to_${filterSummary.endDate}`
