@@ -1,5 +1,5 @@
 import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import autoTable, { CellHookData } from "jspdf-autotable";
 import { WORKERS_BY_LOCATION } from "./workforce";
 
 export interface PDFExportRecord {
@@ -31,18 +31,6 @@ export interface PDFExportFilterSummary {
 export interface PDFCustomColumnDef {
   key: string;
   name: string;
-}
-
-export interface AutoTableCellHookData {
-  section: string;
-  row: { index: number };
-  cell: {
-    styles: {
-      textColor?: number[] | string;
-      fillColor?: number[] | string | boolean;
-      fontStyle?: string;
-    };
-  };
 }
 
 // All hardcoded workers defined across the system (Mirpur, Narshinghpur, and designated personnel)
@@ -232,7 +220,7 @@ export function generateShiftLogPDF(
     },
     margin: { left: 239, right: 14, bottom: 18 },
     tableWidth: 44,
-    didParseCell: (data: AutoTableCellHookData) => {
+    didParseCell: (data: CellHookData) => {
       if (data.section === "body") {
         const worker = roster[data.row.index];
         const present = isWorkerPresent(worker);
